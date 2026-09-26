@@ -18,11 +18,12 @@
 #define SERVO_L_PIN 33
 #define SERVO_R_PIN 19
 
-// การตั้งค่า PWM สำหรับ ESP32 Native (ledc)
-// หมายเหตุ: ESP32 Arduino core 3.x เปลี่ยน ledc API เป็นแบบอิงขา (pin-based)
-// ไม่ต้องกำหนดเลขช่อง (channel) เองแล้ว ใช้ ledcAttach(pin, freq, res) + ledcWrite(pin, duty) แทน
-#define PWM_FREQ 5000
-#define PWM_RESOLUTION 8
+// FIX: เปลี่ยนมาใช้ analogWrite() แทน ledcAttach()/ledcWrite() (native LEDC
+// pin-based API) เพราะพบว่า ledcAttach() ชนกับการจอง PWM timer ของ
+// ESP32Servo (ที่ใช้คุมประตู) แบบเงียบๆ — ทำให้มอเตอร์ไม่หมุน (ได้ยินแค่
+// เสียงจี๊ด) ในขณะที่ประตูยังทำงานได้ปกติ ยืนยันจากการเทียบกับ
+// esp32_gesture_receiver.ino ที่ใช้ analogWrite() แล้วมอเตอร์ทำงานได้ปกติ
+// ไม่ต้องใช้ PWM_FREQ / PWM_RESOLUTION / ledcAttach() อีกต่อไป
 
 // ==========================================
 // 2. ตั้งค่าเครือข่าย Wi-Fi
@@ -40,34 +41,35 @@ const unsigned long TIMEOUT_MS = 500; // หากไม่ได้รับค
 bool commandReceived = false;         // Flag ป้องกัน timeout spam ตอนเปิดเครื่อง
 
 // ==========================================
-// ฟังก์ชันควบคุมมอเตอร์ (ใช้ ledcWrite แทน analogWrite)
+// ฟังก์ชันควบคุมมอเตอร์ (analogWrite — เหมือน esp32_gesture_receiver.ino
+// ที่ยืนยันแล้วว่าใช้งานได้จริง แทนที่ ledcWrite เดิม)
 // ==========================================
 // speed มีค่าตั้งแต่ -255 ถึง 255 (บวก = เดินหน้า, ลบ = ถอยหลัง)
 void setMotorLeft(int speed) {
   int magnitude = constrain(abs(speed), 0, 255);
   if (speed == 0) {
-    ledcWrite(L_IN1_PIN, 0);
-    ledcWrite(L_IN2_PIN, 0);
+    analogWrite(L_IN1_PIN, 0);
+    analogWrite(L_IN2_PIN, 0);
   } else if (speed > 0) {
-    ledcWrite(L_IN1_PIN, magnitude);
-    ledcWrite(L_IN2_PIN, 0);
+    analogWrite(L_IN1_PIN, magnitude);
+    analogWrite(L_IN2_PIN, 0);
   } else {
-    ledcWrite(L_IN1_PIN, 0);
-    ledcWrite(L_IN2_PIN, magnitude);
+    analogWrite(L_IN1_PIN, 0);
+    analogWrite(L_IN2_PIN, magnitude);
   }
 }
 
 void setMotorRight(int speed) {
   int magnitude = constrain(abs(speed), 0, 255);
   if (speed == 0) {
-    ledcWrite(R_IN1_PIN, 0);
-    ledcWrite(R_IN2_PIN, 0);
+    analogWrite(R_IN1_PIN, 0);
+    analogWrite(R_IN2_PIN, 0);
   } else if (speed > 0) {
-    ledcWrite(R_IN1_PIN, magnitude);
-    ledcWrite(R_IN2_PIN, 0);
+    analogWrite(R_IN1_PIN, magnitude);
+    analogWrite(R_IN2_PIN, 0);
   } else {
-    ledcWrite(R_IN1_PIN, 0);
-    ledcWrite(R_IN2_PIN, magnitude);
+    analogWrite(R_IN1_PIN, 0);
+    analogWrite(R_IN2_PIN, magnitude);
   }
 }
 
@@ -98,7 +100,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       lastCommandTime = millis(); // รีเซ็ตเวลา Timeout
       commandReceived = true;     // ยืนยันว่ามีการติดต่อแล้ว
       
-      // ตัวอย่าง Payload: {"vL": 180, "vR": -180, "doorL": 30, "doorR": 150}
+      // ตัวอย่าง Payload: {"vL": 180, "vR": -180, "door_cmd": "collect"}
       StaticJsonDocument<200> doc; // หากใช้ ArduinoJson v7 อาจต้องเปลี่ยนเป็น JsonDocument doc;
       DeserializationError error = deserializeJson(doc, payload);
 
@@ -138,13 +140,14 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 // ==========================================
 void setup() {
   Serial.begin(115200);
-  
-  // ตั้งค่า Native PWM (ledc) สำหรับมอเตอร์แบบ 2 เส้น (4 ขา)
-  // core 3.x: ledcAttach(pin, freq, resolution) ผูก PWM เข้ากับขาโดยตรง ไม่ต้องมีเลข channel
-  ledcAttach(L_IN1_PIN, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(L_IN2_PIN, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(R_IN1_PIN, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(R_IN2_PIN, PWM_FREQ, PWM_RESOLUTION);
+
+  // FIX: pinMode(OUTPUT) ธรรมดา + analogWrite() แทน ledcAttach() เดิม —
+  // ไม่ต้องจอง LEDC channel/timer เองอีกต่อไป ปล่อยให้ Arduino-ESP32 core
+  // จัดการให้เบื้องหลัง เหมือนที่ esp32_gesture_receiver.ino ทำ
+  pinMode(L_IN1_PIN, OUTPUT);
+  pinMode(L_IN2_PIN, OUTPUT);
+  pinMode(R_IN1_PIN, OUTPUT);
+  pinMode(R_IN2_PIN, OUTPUT);
 
   // เริ่มต้น DoorControl
   doorControl_begin(SERVO_L_PIN, SERVO_R_PIN);

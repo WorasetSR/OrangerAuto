@@ -327,7 +327,12 @@ class GemstoneRobotController:
                 
             # CRIT-4 & NEW-1 FIX: Split mouth_pos for dist, robot_pos for steering
             vL, vR, _, _ = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
-            self.send_command(vL, vR, door_cmd="collect") 
+            # Door was already opened once when we transitioned into this state
+            # (see ALIGN_APPROACH). Don't resend door_cmd every frame here — doing
+            # so drives the servo continuously at the same time the drive motors
+            # need their highest current (start/stall), which can sag a marginal
+            # power supply enough to stall the motors while the servo keeps working.
+            self.send_command(vL, vR)
             
             # Distance from mouth to stone
             dist_to_stone = math.hypot(mouth_pos[0] - self.target_stone['pos'][0],
