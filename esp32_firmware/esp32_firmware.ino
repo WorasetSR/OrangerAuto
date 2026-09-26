@@ -18,8 +18,8 @@
 #define SERVO_L_PIN 33
 #define SERVO_R_PIN 19
 
-// FIX: เปลี่ยนมาใช้ analogWrite() แทน ledcAttach()/ledcWrite() (native LEDC
-// pin-based API) เพราะพบว่า ledcAttach() ชนกับการจอง PWM timer ของ
+// FIX: เปลี่ยนมาใช้ analogWrite() แทน ledcAttach()/ledcWrite() (native LEDC pin-based API)
+// เพราะพบว่า ledcAttach() ชนกับการจอง PWM timer ของ
 // ESP32Servo (ที่ใช้คุมประตู) แบบเงียบๆ — ทำให้มอเตอร์ไม่หมุน (ได้ยินแค่
 // เสียงจี๊ด) ในขณะที่ประตูยังทำงานได้ปกติ ยืนยันจากการเทียบกับ
 // esp32_gesture_receiver.ino ที่ใช้ analogWrite() แล้วมอเตอร์ทำงานได้ปกติ
