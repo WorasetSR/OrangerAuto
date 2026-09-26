@@ -18,14 +18,11 @@
 #define SERVO_L_PIN 33
 #define SERVO_R_PIN 19
 
-// การตั้งค่า PWM สำหรับ ESP32 Native (ledc) 
-// (มอเตอร์ 2 ตัว แบบ 2 เส้น ต้องใช้ 4 ช่อง PWM)
+// การตั้งค่า PWM สำหรับ ESP32 Native (ledc)
+// หมายเหตุ: ESP32 Arduino core 3.x เปลี่ยน ledc API เป็นแบบอิงขา (pin-based)
+// ไม่ต้องกำหนดเลขช่อง (channel) เองแล้ว ใช้ ledcAttach(pin, freq, res) + ledcWrite(pin, duty) แทน
 #define PWM_FREQ 5000
 #define PWM_RESOLUTION 8
-#define L_IN1_CH 0
-#define L_IN2_CH 1
-#define R_IN1_CH 2
-#define R_IN2_CH 3
 
 // ==========================================
 // 2. ตั้งค่าเครือข่าย Wi-Fi
@@ -49,28 +46,28 @@ bool commandReceived = false;         // Flag ป้องกัน timeout spam
 void setMotorLeft(int speed) {
   int magnitude = constrain(abs(speed), 0, 255);
   if (speed == 0) {
-    ledcWrite(L_IN1_CH, 0);
-    ledcWrite(L_IN2_CH, 0);
+    ledcWrite(L_IN1_PIN, 0);
+    ledcWrite(L_IN2_PIN, 0);
   } else if (speed > 0) {
-    ledcWrite(L_IN1_CH, magnitude);
-    ledcWrite(L_IN2_CH, 0);
+    ledcWrite(L_IN1_PIN, magnitude);
+    ledcWrite(L_IN2_PIN, 0);
   } else {
-    ledcWrite(L_IN1_CH, 0);
-    ledcWrite(L_IN2_CH, magnitude);
+    ledcWrite(L_IN1_PIN, 0);
+    ledcWrite(L_IN2_PIN, magnitude);
   }
 }
 
 void setMotorRight(int speed) {
   int magnitude = constrain(abs(speed), 0, 255);
   if (speed == 0) {
-    ledcWrite(R_IN1_CH, 0);
-    ledcWrite(R_IN2_CH, 0);
+    ledcWrite(R_IN1_PIN, 0);
+    ledcWrite(R_IN2_PIN, 0);
   } else if (speed > 0) {
-    ledcWrite(R_IN1_CH, magnitude);
-    ledcWrite(R_IN2_CH, 0);
+    ledcWrite(R_IN1_PIN, magnitude);
+    ledcWrite(R_IN2_PIN, 0);
   } else {
-    ledcWrite(R_IN1_CH, 0);
-    ledcWrite(R_IN2_CH, magnitude);
+    ledcWrite(R_IN1_PIN, 0);
+    ledcWrite(R_IN2_PIN, magnitude);
   }
 }
 
@@ -143,17 +140,11 @@ void setup() {
   Serial.begin(115200);
   
   // ตั้งค่า Native PWM (ledc) สำหรับมอเตอร์แบบ 2 เส้น (4 ขา)
-  ledcSetup(L_IN1_CH, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(L_IN1_PIN, L_IN1_CH);
-  
-  ledcSetup(L_IN2_CH, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(L_IN2_PIN, L_IN2_CH);
-  
-  ledcSetup(R_IN1_CH, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(R_IN1_PIN, R_IN1_CH);
-  
-  ledcSetup(R_IN2_CH, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(R_IN2_PIN, R_IN2_CH);
+  // core 3.x: ledcAttach(pin, freq, resolution) ผูก PWM เข้ากับขาโดยตรง ไม่ต้องมีเลข channel
+  ledcAttach(L_IN1_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttach(L_IN2_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttach(R_IN1_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttach(R_IN2_PIN, PWM_FREQ, PWM_RESOLUTION);
 
   // เริ่มต้น DoorControl
   doorControl_begin(SERVO_L_PIN, SERVO_R_PIN);

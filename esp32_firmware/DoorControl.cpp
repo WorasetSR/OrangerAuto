@@ -6,12 +6,12 @@ static Servo servoLeft;
 static Servo servoRight;
 
 // มุมเซอร์โวตอนปิดสนิท (ต้อง Calibrate หน้างาน)
-static const int ANGLE_LEFT_CLOSED  = 0;
-static const int ANGLE_RIGHT_CLOSED = 180;
+static const int ANGLE_LEFT_CLOSED  = 90;
+static const int ANGLE_RIGHT_CLOSED = 90;
 
 // ทิศทางการหมุนตอนเปิดเทียบกับตำแหน่งปิด: +1 = มุมเพิ่มขึ้น, -1 = มุมลดลง
-static const int LEFT_OPEN_DIRECTION  = +1;
-static const int RIGHT_OPEN_DIRECTION = -1;
+static const int LEFT_OPEN_DIRECTION  = -1;
+static const int RIGHT_OPEN_DIRECTION = +1;
 
 // gap ตรงกลาง = CHAMBER_WIDTH_CM - 2 * DOOR_WIDTH_CM * cos(theta)
 static const float CHAMBER_WIDTH_CM = 12.0;  // ความกว้างช่องเก็บทั้งหมด

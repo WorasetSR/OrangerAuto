@@ -1,7 +1,6 @@
 import math
 import time
 import json
-import os
 import websocket
 import cv2
 
@@ -26,6 +25,10 @@ class GemstoneRobotController:
         self.max_capacity = 4
         
         # Modules
+        # VisionTracker automatically loads calibration.json (homography + field
+        # boundary mask, so detection ignores the border tiles) and
+        # manual_dropzones.json (fixed drop-zone positions) in its own __init__ —
+        # the same calibrated files debug_vision.py uses. No need to load them again here.
         self.vision = VisionTracker()
         self.strategy = StrategyEngine()
         self.planner = PathPlanner()
@@ -42,16 +45,9 @@ class GemstoneRobotController:
             'red': (2000, 1000), 'blue': (100, 1000), 'green': (100, 600),
             'purple': (100, 200), 'cyan': (1050, 200), 'orange': (2000, 200)
         }
-        # Dynamically discovered or Manually set drop zones
+        # Drop zones come from self.vision (calibrated manual_dropzones.json),
+        # picked up in the INIT state below via state_data["drop_zones"].
         self.drop_zones = {}
-        if os.path.exists("manual_dropzones.json"):
-            try:
-                with open("manual_dropzones.json", "r") as f:
-                    raw = json.load(f)
-                    self.drop_zones = {k: tuple(v) for k, v in raw.items()}
-                print(f"[INIT] Loaded MANUAL Drop Zones from file: {self.drop_zones}")
-            except Exception as e:
-                print(f"[INIT] Error loading manual dropzones: {e}")
 
         # WebSocket Setup
         self.ws_host = host

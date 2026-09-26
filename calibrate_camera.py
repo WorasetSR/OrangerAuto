@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import json
 
 # รายการเก็บพิกัดที่คลิก
 clicked_points = []
@@ -50,8 +51,11 @@ def main():
     cv2.destroyAllWindows()
     
     if len(clicked_points) == 4:
-        print("\n=== ได้พิกัดครบ 4 มุมแล้ว! นำค่าด้านล่างนี้ไปใส่ใน vision_tracker.py ได้เลย ===")
+        with open("calibration.json", "w") as f:
+            json.dump({"src_pts": clicked_points}, f, indent=4)
+        print("\n=== ได้พิกัดครบ 4 มุมแล้ว! บันทึกลงไฟล์ calibration.json เรียบร้อย ===")
         print(f"src_pts = {clicked_points}")
+        print("ทุกสคริปต์ (debug_vision.py, setup_dropzones.py, main.py) จะโหลดค่านี้อัตโนมัติ")
     else:
         print(f"\nคุณคลิกไปแค่ {len(clicked_points)} จุด (ต้องคลิกให้ครบ 4 จุดแล้วค่อยกด q)")
 

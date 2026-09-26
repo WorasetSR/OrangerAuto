@@ -20,7 +20,7 @@ class VisionTracker:
         self.FIELD_W_MM = 2100
         self.FIELD_H_MM = 1200
         
-        # Homography Matrix (Mocked for now - should be calibrated using 4 corners of the field)
+        # Homography Matrix (Mocked default - overwritten below if calibration.json exists)
         scale_x = self.FIELD_W_MM / 640.0
         scale_y = self.FIELD_H_MM / 480.0
         self.H_matrix = np.array([
@@ -28,6 +28,60 @@ class VisionTracker:
             [0, scale_y, 0],
             [0, 0, 1]
         ], dtype=np.float32)
+
+        # Auto-load the latest calibration saved by calibrate_camera.py, if present,
+        # so every script uses the exact same, current homography.
+        self.field_mask = None  # None = no boundary restriction (full frame)
+        self.load_calibration()
+
+        # Drop zones are painted on the field and never move, so their positions
+        # are loaded once from the manual calibration file (setup_dropzones.py)
+        # instead of being re-detected every frame from noisy color blobs.
+        self.manual_drop_zones = {}
+        self.load_manual_dropzones()
+
+    def load_manual_dropzones(self, dropzones_file="manual_dropzones.json"):
+        if not os.path.exists(dropzones_file):
+            print(f"[WARNING] {dropzones_file} not found. Drop zones will be empty. "
+                  f"Run setup_dropzones.py first.")
+            return False
+
+        with open(dropzones_file, 'r') as f:
+            data = json.load(f)
+        self.manual_drop_zones = {color: tuple(pos) for color, pos in data.items()}
+        print(f"[INFO] Loaded {len(self.manual_drop_zones)} fixed drop zones from {dropzones_file}")
+        return True
+
+    def load_calibration(self, calibration_file="calibration.json"):
+        if not os.path.exists(calibration_file):
+            print(f"[WARNING] {calibration_file} not found. Using mocked (uncalibrated) H_matrix. "
+                  f"Run calibrate_camera.py first for accurate mm coordinates.")
+            return False
+
+        with open(calibration_file, 'r') as f:
+            data = json.load(f)
+        src_pts = data["src_pts"]
+
+        dst_pts = [
+            [0, 0],
+            [self.FIELD_W_MM, 0],
+            [0, self.FIELD_H_MM],
+            [self.FIELD_W_MM, self.FIELD_H_MM]
+        ]
+        self.calibrate_homography(src_pts, dst_pts)
+
+        # Build a pixel-space mask of the field interior from the same 4 corners,
+        # so color detection (stones etc.) never picks up things outside the field
+        # (e.g. the red foam border tiles around the playing area).
+        # src_pts order is [top-left, top-right, bottom-left, bottom-right];
+        # reorder to perimeter order [TL, TR, BR, BL] for a valid (non self-intersecting) polygon.
+        tl, tr, bl, br = src_pts
+        polygon = np.array([tl, tr, br, bl], dtype=np.int32)
+        self.field_mask = np.zeros((480, 640), dtype=np.uint8)
+        cv2.fillConvexPoly(self.field_mask, polygon, 255)
+
+        print(f"[INFO] Loaded calibration from {calibration_file}: src_pts={src_pts}")
+        return True
 
     def calibrate_homography(self, src_points, dst_points):
         """src_points: 4 corners in pixel, dst_points: 4 corners in mm"""
@@ -81,7 +135,7 @@ class VisionTracker:
         state = {
             "robot": {"pos": None, "heading": 0, "mouth_pos": None},
             "stones": [],
-            "drop_zones": {}
+            "drop_zones": dict(self.manual_drop_zones)  # fixed, calibrated once — not re-detected per frame
         }
         
         # 1. Detect Robot (ArUco ID:0)
@@ -137,6 +191,12 @@ class VisionTracker:
             # Noise reduction
             mask = cv2.erode(mask, None, iterations=2)
             mask = cv2.dilate(mask, None, iterations=2)
+
+            # Restrict detection to inside the field boundary only, so the red/brown
+            # foam border tiles (or anything else outside the field) can never be
+            # picked up as a stone or zone, regardless of color.
+            if self.field_mask is not None:
+                mask = cv2.bitwise_and(mask, self.field_mask)
             
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for cnt in contours:
@@ -155,17 +215,11 @@ class VisionTracker:
                         })
                         stone_id += 1
                         cv2.circle(frame, (cX, cY), 5, (255, 255, 255), -1)
-                elif area > 3000:
-                    # Detect drop zone (large colored area)
-                    M = cv2.moments(cnt)
-                    if M["m00"] > 0:
-                        cX = int(M["m10"] / M["m00"])
-                        cY = int(M["m01"] / M["m00"])
-                        pos_mm = self.px_to_mm((cX, cY))
-                        
-                        if color_name not in state["drop_zones"]:
-                            state["drop_zones"][color_name] = pos_mm
-                            cv2.drawContours(frame, [cnt], -1, (255, 0, 0), 2)
+                # NOTE: drop zones are no longer detected here — they're fixed positions
+                # loaded once from manual_dropzones.json (see load_manual_dropzones).
+                # Re-detecting them from a per-frame color blob was unreliable: any other
+                # object in view with a matching hue and area > 3000px (glare, cables,
+                # skin, etc.) could hijack the position away from the real painted zone.
         
         return state, frame
 
