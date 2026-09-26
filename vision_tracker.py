@@ -14,6 +14,28 @@ class VisionTracker:
         # Aruco dictionary
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         self.aruco_params = cv2.aruco.DetectorParameters()
+
+        # Tuned for robustness while the robot is moving (motion blur), viewed at an
+        # angle, or under uneven lighting — defaults are tuned for sharp, head-on shots.
+        # Wider adaptive-threshold sweep: catches the marker under uneven lighting
+        # across the field instead of only the default narrow window range.
+        self.aruco_params.adaptiveThreshWinSizeMin = 3
+        self.aruco_params.adaptiveThreshWinSizeMax = 53
+        self.aruco_params.adaptiveThreshWinSizeStep = 4
+        # More tolerant polygon-edge fitting: a motion-blurred marker's edges are
+        # slightly wavy/rounded rather than crisp straight lines; the default
+        # accuracy rate (0.03) can reject these as "not square enough".
+        self.aruco_params.polygonalApproxAccuracyRate = 0.06
+        # Detect a smaller minimum marker size, so the marker is still found even
+        # if it's a bit farther from the camera or partially blurred at the edges.
+        self.aruco_params.minMarkerPerimeterRate = 0.02
+        # Sub-pixel corner refinement: improves heading-angle stability (used for
+        # atan2 in get_state) even when the marker is slightly blurred.
+        self.aruco_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        self.aruco_params.cornerRefinementWinSize = 5
+        self.aruco_params.cornerRefinementMaxIterations = 30
+        self.aruco_params.cornerRefinementMinAccuracy = 0.1
+
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
         
         # Field dimensions in mm

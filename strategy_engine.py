@@ -59,11 +59,22 @@ class StrategyEngine:
         best_color = max(color_counts, key=color_counts.get)
         return best_color
 
-    def find_best_stone(self, stones, target_color, robot_pos, drop_zones):
+    def find_best_stone(self, stones, target_color, robot_pos, drop_zones,
+                         preferred_pos=None, sticky_bonus=250, sticky_radius=80):
         """
         Finds the most accessible stone of the target color.
         Prioritizes stones furthest from center (to peel from outside in),
         then by proximity to the robot.
+
+        preferred_pos: the mm position of the stone we were already targeting
+        (if any). Stones near this position get a score bonus, so that when
+        several stones score nearly the same (a dense cluster), tiny
+        frame-to-frame position noise doesn't flip the "best" stone every
+        frame — which previously caused the robot to keep re-aiming at a
+        different stone each frame and never converge (spin without
+        progress). Note: stone 'id' is reassigned fresh every frame in
+        vision_tracker.py, so it can't be used to track identity — position
+        is the only stable way to recognize "the same stone" across frames.
         """
         stones = self.get_valid_stones(stones, drop_zones)
         if not stones or not robot_pos:
@@ -83,7 +94,15 @@ class StrategyEngine:
             dist_robot = math.hypot(s['pos'][0] - robot_pos[0], s['pos'][1] - robot_pos[1])
             
             # Score logic: we want HIGH dist_center and LOW dist_robot
-            score = dist_center - (dist_robot * 0.5) 
+            score = dist_center - (dist_robot * 0.5)
+
+            # Stickiness: if this stone is close to where our current target
+            # was, treat it as "the same stone" and favor keeping it, instead
+            # of jumping to a different stone in the same cluster every frame.
+            if preferred_pos is not None:
+                dist_pref = math.hypot(s['pos'][0] - preferred_pos[0], s['pos'][1] - preferred_pos[1])
+                if dist_pref < sticky_radius:
+                    score += sticky_bonus
             
             if score > best_score:
                 best_score = score

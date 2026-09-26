@@ -3,11 +3,30 @@ import time
 import json
 import websocket
 import cv2
+import numpy as np
 
 # Import custom modules
 from vision_tracker import VisionTracker
 from strategy_engine import StrategyEngine
 from path_planner import PathPlanner
+
+
+def mm_to_px(H_matrix, mm_pos):
+    """แปลงพิกัด mm กลับเป็นพิกเซลบนจอ (เหมือนใน debug_vision.py) ใช้วาดลูกศรบอกทิศทาง"""
+    inv_H = np.linalg.inv(H_matrix)
+    pt = np.array([[[mm_pos[0], mm_pos[1]]]], dtype=np.float32)
+    dst = cv2.perspectiveTransform(pt, inv_H)
+    return (int(dst[0][0][0]), int(dst[0][0][1]))
+
+
+def describe_motor_command(vL, vR, tolerance=20):
+    """แปลงค่า vL, vR เป็นคำอธิบายทิศทางที่มนุษย์อ่านเข้าใจง่าย"""
+    if vL == 0 and vR == 0:
+        return "STOP"
+    if abs(vL - vR) < tolerance:
+        return "FORWARD" if vL > 0 else "BACKWARD"
+    # ตามธรรมเนียมในโค้ด calculate_steering: vL<vR -> เลี้ยวขวา, vL>vR -> เลี้ยวซ้าย
+    return "TURN RIGHT" if vL < vR else "TURN LEFT"
 
 class GemstoneRobotController:
     """
@@ -40,6 +59,16 @@ class GemstoneRobotController:
         # Timers
         self._state_timer = 0
         self._finished_printed = False # NEW-3 FIX: Prevent print spam
+
+        # Robot-marker tracking: used to (a) log how often the ArUco marker drops
+        # out, and (b) stop state timeouts (ALIGN_APPROACH etc.) from counting
+        # time when we simply can't see the robot.
+        self._robot_lost_since = None
+        self._robot_lost_frame_count = 0
+
+        # ค่าคำสั่งมอเตอร์ล่าสุด ใช้แสดงผลบนจอว่ากำลังสั่งให้รถไปทางไหน
+        self._last_vL = 0
+        self._last_vR = 0
         
         self.FALLBACK_DROP_ZONES = {
             'red': (2000, 1000), 'blue': (100, 1000), 'green': (100, 600),
@@ -69,6 +98,10 @@ class GemstoneRobotController:
             self.ws = None
 
     def send_command(self, vL=0, vR=0, door_cmd=None):
+        # เก็บค่าล่าสุดไว้แสดงผลบนจอ ไม่ว่าจะส่งสำเร็จหรือไม่
+        self._last_vL = int(vL)
+        self._last_vR = int(vR)
+
         if not self.ws:
             return 
             
@@ -101,13 +134,58 @@ class GemstoneRobotController:
         cv2.putText(frame, f"Stones: {self.stone_count}/{self.max_capacity}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         if self.target_color:
             cv2.putText(frame, f"Target: {self.target_color}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        # แสดงคำสั่งมอเตอร์ล่าสุดที่กำลังสั่งอยู่ (ค่านี้มาจากรอบก่อนหน้า 1 เฟรม
+        # เพราะ FSM ของเฟรมนี้ยังไม่คำนวณ vL/vR ใหม่ ณ จุดที่วาดภาพนี้)
+        direction_label = describe_motor_command(self._last_vL, self._last_vR)
+        cv2.putText(frame, f"CMD: {direction_label}  (vL={self._last_vL}, vR={self._last_vR})",
+                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        if robot_pos is not None:
+            robot_px = mm_to_px(self.vision.H_matrix, robot_pos)
+            if direction_label in ("FORWARD", "BACKWARD"):
+                # วาดลูกศรตามทิศทางที่รถกำลังมุ่งหน้า (หรือย้อนกลับถ้าถอยหลัง)
+                travel_angle = robot_heading if direction_label == "FORWARD" else robot_heading + math.pi
+                tip_mm = (robot_pos[0] + 220 * math.cos(travel_angle),
+                          robot_pos[1] + 220 * math.sin(travel_angle))
+                tip_px = mm_to_px(self.vision.H_matrix, tip_mm)
+                arrow_color = (0, 255, 0) if direction_label == "FORWARD" else (0, 165, 255)
+                cv2.arrowedLine(frame, robot_px, tip_px, arrow_color, 3, tipLength=0.35)
+            elif direction_label in ("TURN LEFT", "TURN RIGHT"):
+                # วาดวงกลมโค้งพร้อมหัวลูกศรบอกทิศการหมุน
+                spin_color = (255, 0, 255)
+                clockwise = (direction_label == "TURN RIGHT")
+                start_angle, end_angle = (0, 300) if clockwise else (300, 0)
+                cv2.ellipse(frame, robot_px, (35, 35), 0, start_angle, end_angle, spin_color, 3)
+                cv2.putText(frame, direction_label, (robot_px[0] - 40, robot_px[1] - 45),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, spin_color, 2)
+
         cv2.imshow("Robot Command Center", frame)
         cv2.waitKey(1) # MIN-3: Moved waitKey here to avoid blocking vision pipeline
 
         # Skip logic if robot not found
         if not robot_pos:
+            self._robot_lost_frame_count += 1
+            if self._robot_lost_since is None:
+                self._robot_lost_since = time.time()
+            # Print every ~30 frames (roughly once a second) instead of every frame, to avoid log spam
+            if self._robot_lost_frame_count % 30 == 1:
+                lost_secs = time.time() - self._robot_lost_since
+                print(f"[VISION] Robot ArUco marker not detected "
+                      f"({self._robot_lost_frame_count} frames, {lost_secs:.1f}s so far)")
             self.send_command(0, 0)
             return
+
+        if self._robot_lost_since is not None:
+            # Marker just came back — extend the current state's timeout deadline
+            # by however long it was gone, so lost-tracking time isn't charged
+            # against ALIGN_APPROACH / DRIVE_INGEST / NAV_WAYPOINTS timeouts.
+            lost_duration = time.time() - self._robot_lost_since
+            print(f"[VISION] Robot ArUco marker reacquired after {lost_duration:.2f}s "
+                  f"({self._robot_lost_frame_count} frames lost)")
+            self._state_timer += lost_duration
+            self._robot_lost_since = None
+            self._robot_lost_frame_count = 0
 
         # 2. FSM Logic
         if self.state == "INIT":
@@ -193,7 +271,10 @@ class GemstoneRobotController:
                 self.state = "SCAN_OUTER_RING"
                 return
 
-            updated_stone = self.strategy.find_best_stone(stones, self.target_color, robot_pos, self.drop_zones)
+            updated_stone = self.strategy.find_best_stone(
+                stones, self.target_color, robot_pos, self.drop_zones,
+                preferred_pos=self.target_stone['pos'] if self.target_stone else None
+            )
             if updated_stone:
                 self.target_stone = updated_stone
             else:
@@ -202,7 +283,21 @@ class GemstoneRobotController:
 
             vL, vR, dist, aligned = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
             self.send_command(vL, vR)
-            
+
+            # DEBUG: log steering state a few times a second so we can see whether
+            # the error is converging (heading bug) or the target keeps jumping
+            # between different stone ids (target flapping in find_best_stone).
+            self._align_debug_count = getattr(self, "_align_debug_count", 0) + 1
+            if self._align_debug_count % 10 == 1:
+                heading_deg = math.degrees(robot_heading)
+                target_dx = self.target_stone['pos'][0] - robot_pos[0]
+                target_dy = self.target_stone['pos'][1] - robot_pos[1]
+                target_angle_deg = math.degrees(math.atan2(target_dy, target_dx))
+                print(f"[DEBUG ALIGN] stone_id={self.target_stone.get('id')} "
+                      f"robot_pos={robot_pos} heading={heading_deg:.1f}deg "
+                      f"target_pos={self.target_stone['pos']} target_angle={target_angle_deg:.1f}deg "
+                      f"dist={dist:.0f}mm vL={vL} vR={vR} aligned={aligned}")
+
             if aligned and dist < 200: # 20cm away, go straight
                 self.send_command(0, 0, door_cmd="collect") # MAJ-5: Open door early
                 self.planner.reset_pid()
@@ -222,7 +317,10 @@ class GemstoneRobotController:
                 self.state = "BACKOUT_CLEAR"
                 return
 
-            updated_stone = self.strategy.find_best_stone(stones, self.target_color, robot_pos, self.drop_zones)
+            updated_stone = self.strategy.find_best_stone(
+                stones, self.target_color, robot_pos, self.drop_zones,
+                preferred_pos=self.target_stone['pos'] if self.target_stone else None
+            )
             if updated_stone:
                 self.target_stone = updated_stone
                 
