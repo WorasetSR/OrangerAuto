@@ -62,6 +62,20 @@ class VisionTracker:
         self.manual_drop_zones = {}
         self.load_manual_dropzones()
 
+        # --- Persistent stone tracking ---
+        # Previously each stone got a fresh id every frame (id = scan order of
+        # contours), so "id" was meaningless across frames and the robot had no
+        # way to keep aiming at "the same stone". Instead we now match each
+        # frame's detections against the previous frame's tracked stones by
+        # position (nearest neighbor of the same color, within STONE_MATCH_RADIUS_MM)
+        # and keep the same id as long as a stone keeps being seen near where it
+        # was. A stone that isn't matched for STONE_MAX_MISSES frames in a row is
+        # dropped (assumed collected / moved / occluded).
+        self._next_stone_id = 0
+        self._tracked_stones = {}  # id -> {'pos': (x,y), 'color': str, 'misses': int}
+        self.STONE_MATCH_RADIUS_MM = 60
+        self.STONE_MAX_MISSES = 5
+
     def load_manual_dropzones(self, dropzones_file="manual_dropzones.json"):
         if not os.path.exists(dropzones_file):
             print(f"[WARNING] {dropzones_file} not found. Drop zones will be empty. "
@@ -111,6 +125,66 @@ class VisionTracker:
             np.array(src_points, dtype=np.float32),
             np.array(dst_points, dtype=np.float32))
 
+    def _update_stone_tracks(self, detections):
+        """
+        detections: list of {'color': str, 'pos': (x_mm, y_mm)} for THIS frame,
+        with no id yet.
+
+        Returns: list of {'id', 'color', 'pos'} for stones visible this frame,
+        where 'id' is stable across frames for the same physical stone (matched
+        by nearest position of the same color, within STONE_MATCH_RADIUS_MM).
+        """
+        unmatched = list(detections)
+
+        # 1. Try to match each existing track to the closest unmatched detection
+        #    of the same color, within the match radius (greedy nearest-neighbor).
+        for tid, track in self._tracked_stones.items():
+            best_idx, best_dist = None, self.STONE_MATCH_RADIUS_MM
+            for i, d in enumerate(unmatched):
+                if d['color'] != track['color']:
+                    continue
+                dist = math.hypot(d['pos'][0] - track['pos'][0], d['pos'][1] - track['pos'][1])
+                if dist < best_dist:
+                    best_dist, best_idx = dist, i
+
+            if best_idx is not None:
+                d = unmatched.pop(best_idx)
+                track['pos'] = d['pos']
+                track['misses'] = 0
+            else:
+                track['misses'] += 1
+
+        # 2. Drop tracks that have been missing too long (stone likely collected/gone).
+        for tid in [tid for tid, t in self._tracked_stones.items() if t['misses'] > self.STONE_MAX_MISSES]:
+            del self._tracked_stones[tid]
+
+        # 3. Any leftover detections are new stones — assign fresh ids.
+        for d in unmatched:
+            tid = self._next_stone_id
+            self._next_stone_id += 1
+            self._tracked_stones[tid] = {'pos': d['pos'], 'color': d['color'], 'misses': 0}
+
+        # 4. Output only stones actually seen this frame (misses == 0) — used for
+        # picking NEW targets (we don't want to pick a stale/ghost position).
+        return [{'id': tid, 'color': t['color'], 'pos': t['pos']}
+                for tid, t in self._tracked_stones.items() if t['misses'] == 0]
+
+    def get_stone_by_id(self, stone_id):
+        """
+        Look up a specific tracked stone by its persistent id — used by the robot
+        to keep aiming at "the same stone" it already locked onto. Unlike the
+        list returned by get_state()['stones'] (fresh-detections only), this
+        still returns the stone's last known position even if it was missed for
+        up to STONE_MAX_MISSES frames (e.g. briefly hidden behind the robot's
+        own body while approaching) — it only returns None once the track has
+        actually expired and been dropped, meaning the stone is gone for good
+        (collected, or lost track for too long).
+        """
+        t = self._tracked_stones.get(stone_id)
+        if t is None:
+            return None
+        return {'id': stone_id, 'color': t['color'], 'pos': t['pos'], 'misses': t['misses']}
+
     def load_config(self):
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f:
@@ -122,6 +196,13 @@ class VisionTracker:
         """Convert pixel coordinates to millimeter coordinates using Homography"""
         pt = np.array([[[px_pos[0], px_pos[1]]]], dtype=np.float32)
         dst = cv2.perspectiveTransform(pt, self.H_matrix)
+        return (int(dst[0][0][0]), int(dst[0][0][1]))
+
+    def _mm_to_px_local(self, mm_pos):
+        """Inverse of px_to_mm — only used for drawing debug overlays (e.g. stone id labels)."""
+        inv_H = np.linalg.inv(self.H_matrix)
+        pt = np.array([[[mm_pos[0], mm_pos[1]]]], dtype=np.float32)
+        dst = cv2.perspectiveTransform(pt, inv_H)
         return (int(dst[0][0][0]), int(dst[0][0][1]))
 
     def calculate_dynamic_zones(self, stones):
@@ -195,7 +276,7 @@ class VisionTracker:
             
         # 2. Detect Stones (HSV Masking)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        stone_id = 0
+        raw_stone_detections = []  # collected first, then matched to persistent ids below
         for color_name, bounds in self.hsv_ranges.items():
             if color_name == "yellow": continue 
             
@@ -229,19 +310,26 @@ class VisionTracker:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
                         pos_mm = self.px_to_mm((cX, cY))
-                        
-                        state["stones"].append({
-                            "id": stone_id,
-                            "color": color_name,
-                            "pos": pos_mm
-                        })
-                        stone_id += 1
+
+                        raw_stone_detections.append({"color": color_name, "pos": pos_mm})
                         cv2.circle(frame, (cX, cY), 5, (255, 255, 255), -1)
                 # NOTE: drop zones are no longer detected here — they're fixed positions
                 # loaded once from manual_dropzones.json (see load_manual_dropzones).
                 # Re-detecting them from a per-frame color blob was unreliable: any other
                 # object in view with a matching hue and area > 3000px (glare, cables,
                 # skin, etc.) could hijack the position away from the real painted zone.
+
+        # Match this frame's raw detections to previous frames' tracks so each
+        # physical stone keeps the same 'id' for as long as it's tracked.
+        state["stones"] = self._update_stone_tracks(raw_stone_detections)
+
+        # Label each stone with its persistent id on screen, for debugging —
+        # confirms the same stone keeps the same number across frames instead
+        # of the numbers reshuffling every frame.
+        for stone in state["stones"]:
+            stone_px = self._mm_to_px_local(stone["pos"])
+            cv2.putText(frame, f"#{stone['id']}", (stone_px[0] + 6, stone_px[1] + 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
         
         return state, frame
 

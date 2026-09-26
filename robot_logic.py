@@ -39,6 +39,7 @@ class GemstoneRobotController:
         self.target_color = None
         self._last_valid_color = None 
         self.target_stone = None
+        self.target_stone_id = None  # persistent id (from vision_tracker's stone tracker) we're locked onto
         self.stone_count = 0
         self._loaded_color = None # NEW-2 FIX: Track color inside the robot
         self.max_capacity = 4
@@ -250,6 +251,7 @@ class GemstoneRobotController:
                 
             self.target_stone = self.strategy.find_best_stone(stones, self.target_color, robot_pos, self.drop_zones)
             if self.target_stone:
+                self.target_stone_id = self.target_stone['id']  # lock onto this physical stone by persistent id
                 self.planner.reset_pid()
                 self._state_timer = time.time() # RES-2 prep
                 self.state = "ALIGN_APPROACH"
@@ -271,15 +273,14 @@ class GemstoneRobotController:
                 self.state = "SCAN_OUTER_RING"
                 return
 
-            updated_stone = self.strategy.find_best_stone(
-                stones, self.target_color, robot_pos, self.drop_zones,
-                preferred_pos=self.target_stone['pos'] if self.target_stone else None
-            )
-            if updated_stone:
-                self.target_stone = updated_stone
-            else:
+            # ล็อกเป้าด้วย persistent id แทนการคำนวณ "หินที่ดีที่สุด" ใหม่ทุกเฟรม —
+            # กันไม่ให้เป้าหมายสลับไปมาระหว่างหินก้อนอื่นที่อยู่ใกล้ๆ กัน
+            locked_stone = self.vision.get_stone_by_id(self.target_stone_id)
+            if locked_stone is None:
+                print(f"[TARGET] Stone id={self.target_stone_id} lost/collected. Rescanning.")
                 self.state = "SCAN_OUTER_RING"
                 return
+            self.target_stone = locked_stone
 
             vL, vR, dist, aligned = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
             self.send_command(vL, vR)
@@ -293,7 +294,7 @@ class GemstoneRobotController:
                 target_dx = self.target_stone['pos'][0] - robot_pos[0]
                 target_dy = self.target_stone['pos'][1] - robot_pos[1]
                 target_angle_deg = math.degrees(math.atan2(target_dy, target_dx))
-                print(f"[DEBUG ALIGN] stone_id={self.target_stone.get('id')} "
+                print(f"[DEBUG ALIGN] stone_id={self.target_stone_id} (misses={locked_stone.get('misses')}) "
                       f"robot_pos={robot_pos} heading={heading_deg:.1f}deg "
                       f"target_pos={self.target_stone['pos']} target_angle={target_angle_deg:.1f}deg "
                       f"dist={dist:.0f}mm vL={vL} vR={vR} aligned={aligned}")
@@ -317,12 +318,12 @@ class GemstoneRobotController:
                 self.state = "BACKOUT_CLEAR"
                 return
 
-            updated_stone = self.strategy.find_best_stone(
-                stones, self.target_color, robot_pos, self.drop_zones,
-                preferred_pos=self.target_stone['pos'] if self.target_stone else None
-            )
-            if updated_stone:
-                self.target_stone = updated_stone
+            locked_stone = self.vision.get_stone_by_id(self.target_stone_id)
+            if locked_stone is not None:
+                self.target_stone = locked_stone
+            # else: track expired (likely just scooped up / occluded by the mouth
+            # mechanism) — keep driving to the last known position since we're
+            # already this close, rather than aborting the ingest.
                 
             # CRIT-4 & NEW-1 FIX: Split mouth_pos for dist, robot_pos for steering
             vL, vR, _, _ = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
