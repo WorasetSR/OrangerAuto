@@ -149,6 +149,12 @@ void setup() {
   pinMode(R_IN1_PIN, OUTPUT);
   pinMode(R_IN2_PIN, OUTPUT);
 
+  // POINT 3 FIX: ปรับความถี่ PWM เป็น 5,000 Hz แก้ปัญหามอเตอร์ไม่มีแรงและมีเสียงครางที่ความเร็วต่ำ
+  analogWriteFrequency(L_IN1_PIN, 5000);
+  analogWriteFrequency(L_IN2_PIN, 5000);
+  analogWriteFrequency(R_IN1_PIN, 5000);
+  analogWriteFrequency(R_IN2_PIN, 5000);
+
   // เริ่มต้น DoorControl
   doorControl_begin(SERVO_L_PIN, SERVO_R_PIN);
   

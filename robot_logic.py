@@ -184,7 +184,13 @@ class GemstoneRobotController:
                 lost_secs = time.time() - self._robot_lost_since
                 print(f"[VISION] Robot ArUco marker not detected "
                       f"({self._robot_lost_frame_count} frames, {lost_secs:.1f}s so far)")
-            self.send_command(0, 0)
+            
+            # POINT 2 FIX: ให้โอกาสกล้องเบลอ 1.0 วินาที ให้รถวิ่งด้วยความเร็วเดิมไปก่อน
+            if time.time() - self._robot_lost_since < 1.0:
+                self.send_command(self._last_vL, self._last_vR)
+            else:
+                self.send_command(0, 0)
+                
             return
 
         if self._robot_lost_since is not None:
@@ -415,9 +421,6 @@ class GemstoneRobotController:
             target_wp = self.waypoints[self.current_waypoint_idx]
             vL, vR, dist, _ = self.planner.calculate_steering(robot_pos, robot_heading, target_wp)
             
-            # OPT-2 FIX: Scale up speed for navigation
-            vL = int(vL * 1.3)
-            vR = int(vR * 1.3)
             self.send_command(vL, vR)
             
             if dist < 100: # Reached waypoint
