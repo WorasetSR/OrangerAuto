@@ -19,13 +19,13 @@ def main():
     print("เชื่อมต่อสำเร็จ!\n")
 
     print("=== ทดสอบที่ 1: payload แบบง่าย (ไม่มี door_cmd) — ควรวิ่งตรง ===")
-    send(ws, {"vL": 150, "vR": 150}, "ไม่มี door_cmd")
+    send(ws, {"vL": 200, "vR": 200}, "ไม่มี door_cmd")
     time.sleep(3)
     send(ws, {"vL": 0, "vR": 0}, "หยุด")
     time.sleep(1)
 
     print("\n=== ทดสอบที่ 2: payload แบบเดียวกับ DRIVE_INGEST (มี door_cmd) ===")
-    send(ws, {"vL": 150, "vR": 150, "door_cmd": "collect"}, "มี door_cmd='collect'")
+    send(ws, {"vL": 200, "vR": 200, "door_cmd": "collect"}, "มี door_cmd='collect'")
     time.sleep(3)
     send(ws, {"vL": 0, "vR": 0}, "หยุด")
     time.sleep(1)

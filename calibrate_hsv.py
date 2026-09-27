@@ -7,13 +7,90 @@ CONFIG_FILE = "hsv_config.json"
 
 # Default HSV values for 6 colors
 hsv_ranges = {
-    'red':    {'lower': [0, 100, 100], 'upper': [10, 255, 255]},
-    'orange': {'lower': [11, 100, 100], 'upper': [25, 255, 255]},
-    'yellow': {'lower': [26, 100, 100], 'upper': [35, 255, 255]}, # Used for some tuning if needed
-    'green':  {'lower': [36, 100, 100], 'upper': [85, 255, 255]},
-    'cyan':   {'lower': [86, 100, 100], 'upper': [105, 255, 255]},
-    'blue':   {'lower': [106, 100, 100], 'upper': [135, 255, 255]},
-    'purple': {'lower': [136, 100, 100], 'upper': [170, 255, 255]}
+    "red": {
+        "lower": [
+            168,
+            175,
+            181
+        ],
+        "upper": [
+            179,
+            255,
+            255
+        ]
+    },
+    "orange": {
+        "lower": [
+            9,
+            170,
+            150
+        ],
+        "upper": [
+            16,
+            255,
+            255
+        ]
+    },
+    "yellow": {
+        "lower": [
+            26,
+            100,
+            100
+        ],
+        "upper": [
+            35,
+            255,
+            255
+        ]
+    },
+    "green": {
+        "lower": [
+            51,
+            120,
+            124
+        ],
+        "upper": [
+            76,
+            255,
+            255
+        ]
+    },
+    "cyan": {
+        "lower": [
+            83,
+            171,
+            178
+        ],
+        "upper": [
+            103,
+            251,
+            255
+        ]
+    },
+    "blue": {
+        "lower": [
+            75,
+            195,
+            40
+        ],
+        "upper": [
+            140,
+            255,
+            143
+        ]
+    },
+    "purple": {
+        "lower": [
+            143,
+            160,
+            48
+        ],
+        "upper": [
+            163,
+            255,
+            255
+        ]
+    }
 }
 
 def load_config():

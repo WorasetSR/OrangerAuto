@@ -61,6 +61,16 @@ class GemstoneRobotController:
         self._state_timer = 0
         self._finished_printed = False # NEW-3 FIX: Prevent print spam
 
+        # BUGFIX: get_state()['stones'] only contains *fresh* detections
+        # (misses == 0 in vision_tracker), so a single noisy frame (motion
+        # blur, glare, robot's own body occluding the pile right after a
+        # rescan) can legitimately report zero stones even though stones are
+        # still on the field. Require this many *real* seconds of continuous
+        # "no target color found" before concluding the match is truly over,
+        # instead of finishing on the very first empty frame.
+        self._empty_scan_since = None
+        self.EMPTY_SCAN_FINISH_SEC = 1.5
+
         # Robot-marker tracking: used to (a) log how often the ArUco marker drops
         # out, and (b) stop state timeouts (ALIGN_APPROACH etc.) from counting
         # time when we simply can't see the robot.
@@ -86,7 +96,7 @@ class GemstoneRobotController:
         
         # Start Time
         self.start_time = time.time()
-        self.MATCH_LIMIT_SEC = 300 # 5 minutes
+        self.MATCH_LIMIT_SEC = 600 # 5 minutes
 
     def connect_websocket(self):
         try:
@@ -237,6 +247,7 @@ class GemstoneRobotController:
                 
             if not self.target_color:
                 if self.stone_count > 0 and self._last_valid_color:
+                    self._empty_scan_since = None
                     self.planner.reset_pid()
                     drop_pos = self.drop_zones.get(self._last_valid_color, self.FALLBACK_DROP_ZONES.get(self._last_valid_color))
                     self.waypoints = self.planner.generate_perimeter_waypoints(robot_pos, drop_pos)
@@ -244,9 +255,16 @@ class GemstoneRobotController:
                     self._state_timer = time.time() # RES-1 prep
                     self.state = "NAV_WAYPOINTS"
                 else:
-                    self.state = "FINISH"
+                    # BUGFIX: don't finish on one empty frame — wait to see if
+                    # stones reappear once the camera gets a clean look again.
+                    if self._empty_scan_since is None:
+                        self._empty_scan_since = time.time()
+                        print("[SCAN] No stones detected this frame, waiting to confirm field is actually empty...")
+                    elif time.time() - self._empty_scan_since > self.EMPTY_SCAN_FINISH_SEC:
+                        self.state = "FINISH"
                 return 
                 
+            self._empty_scan_since = None
             self._last_valid_color = self.target_color
                 
             self.target_stone = self.strategy.find_best_stone(stones, self.target_color, robot_pos, self.drop_zones)

@@ -6,7 +6,7 @@ static Servo servoLeft;
 static Servo servoRight;
 
 // มุมเซอร์โวตอนปิดสนิท (ต้อง Calibrate หน้างาน)
-static const int ANGLE_LEFT_CLOSED  = 90;
+static const int ANGLE_LEFT_CLOSED  = 70;
 static const int ANGLE_RIGHT_CLOSED = 90;
 
 // ทิศทางการหมุนตอนเปิดเทียบกับตำแหน่งปิด: +1 = มุมเพิ่มขึ้น, -1 = มุมลดลง
@@ -70,16 +70,12 @@ void doorControl_begin(int pinLeft, int pinRight) {
   Serial.print(" angleRightCollect=");
   Serial.println(angleRightCollect);
 
-  // FIX: ไม่บังคับจอง timer 2/3 แบบเจาะจงอีกต่อไป (เดิมคือ
-  // ESP32PWM::allocateTimer(2); ESP32PWM::allocateTimer(3);) เพราะ ESP32 มี
-  // PWM timer ฮาร์ดแวร์แค่ 4 ตัว และ ledcAttach() (ที่ใช้คุมมอเตอร์ DC ใน
-  // ไฟล์หลัก) กับ ESP32Servo เป็นคนละระบบบัญชีจองทรัพยากรที่ไม่รู้จักกัน —
-  // การบังคับจองเจาะจงแบบนี้เคยไปเหยียบ/rewrite ค่าความถี่ของ timer ที่
-  // มอเตอร์ใช้อยู่ก่อนแล้วเงียบๆ (ไม่มี error ให้เห็น) ทำให้ PWM ของมอเตอร์
-  // เพี้ยนจนหมุนไม่ออก (ได้ยินแค่เสียงจี๊ด) ในขณะที่เซอร์โวเองยังทำงานได้ปกติ
-  // ปล่อยให้ ESP32Servo หา channel/timer ที่ว่างเองแทน เหมือนที่ทำใน
-  // esp32_gesture_receiver.ino (ซึ่งไม่ได้ allocateTimer() เองเลย และมอเตอร์
-  // ก็ทำงานได้ปกติ)
+  // จองมั่นให้เซอร์โวใช้ timer 2, 3 ชัดเจน — ตอนนี้มอเตอร์ใช้ analogWrite()
+  // (คนละระบบกับ ledcAttach() เดิม) แล้ว จึงไม่ชนกับ timer ที่ servo จองไว้อีก
+  // ต่อไป (เดิมเคยเอาบรรทัดนี้ออกไปพร้อมกับตอนแก้ฝั่งมอเตอร์ แต่กลับทำให้
+  // servo ไม่มี timer แน่นอนจนใช้งานไม่ได้แทน — เอากลับมาเพื่อความชัวร์)
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
   servoLeft.setPeriodHertz(50);
   servoRight.setPeriodHertz(50);
   servoLeft.attach(pinLeft, 500, 2400);
