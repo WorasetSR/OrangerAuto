@@ -94,7 +94,8 @@ class StrategyEngine:
             dist_robot = math.hypot(s['pos'][0] - robot_pos[0], s['pos'][1] - robot_pos[1])
             
             # Score logic: we want HIGH dist_center and LOW dist_robot
-            score = dist_center - (dist_robot * 0.5)
+            # FIX: บังคับให้ความสำคัญกับหินวงนอก (คูณ 10) ระยะห่างรถเป็นแค่ตัวเลือกรอง
+            score = (dist_center * 10.0) - dist_robot
 
             # Stickiness: if this stone is close to where our current target
             # was, treat it as "the same stone" and favor keeping it, instead
