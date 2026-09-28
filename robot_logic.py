@@ -228,7 +228,7 @@ class GemstoneRobotController:
             else:
                 print("\n[CRITICAL ERROR] Danger Zone not found in manual_dropzones.json!")
                 print("Please run 'python setup_dropzones.py' to draw the Danger Zone.\n")
-                self.set_state('FINISH')
+                self.state = "FINISH"
                 return
 
             print(f"[INIT] Loaded Drop Zones: {self.drop_zones}")
