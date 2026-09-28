@@ -206,40 +206,35 @@ class GemstoneRobotController:
 
         # 2. FSM Logic
         if self.state == "INIT":
-            # Wait a few frames to collect data and setup zones
+            # Manual Mode: Load everything from JSON and skip the 3 second wait
             if self._state_timer == 0:
-                print("[STATE] INIT: Scanning field to calibrate zones...")
+                print("[STATE] INIT: Loading Manual Zones...")
                 self._state_timer = time.time()
                 self.send_command(0, 0)
                 
-            # ถ้าระบบกล้องตรวจเจอโซนสีใหญ่ๆ ก็อัปเดตทับพิกัดให้แม่นยำขึ้น
-            if state_data["drop_zones"]:
-                self.drop_zones.update(state_data["drop_zones"])
-                
-            if time.time() - self._state_timer > 3.0:
-                # 3 seconds scan complete
-                center, danger_zone = self.vision.calculate_dynamic_zones(stones)
-                if center and danger_zone:
-                    self.strategy.update_center(center[0], center[1])
-                    self.planner.update_danger_zone(
-                        danger_zone['x_min'], danger_zone['x_max'],
-                        danger_zone['y_min'], danger_zone['y_max']
-                    )
-                    print(f"[INIT] Dynamic Center set to: {center}")
-                    print(f"[INIT] Dynamic Danger Zone set to: {danger_zone}")
-                
-                # CRIT-3: Fallback drop zones if not detected
-                if len(self.drop_zones) < 6:
-                    print(f"[WARNING] Only {len(self.drop_zones)}/6 drop zones detected, using fallbacks")
-                    for color, pos in self.FALLBACK_DROP_ZONES.items():
-                        if color not in self.drop_zones:
-                            self.drop_zones[color] = pos
-                            
-                print(f"[INIT] Detected Drop Zones: {self.drop_zones}")
-                # Reset timer for next state
-                self._state_timer = 0
-                self.state = "SCAN_OUTER_RING"
+            # ใช้ Drop zones ที่ตั้งค่ามาด้วยมือทั้งหมด
+            self.drop_zones = self.vision.manual_drop_zones
             
+            if self.vision.manual_danger_zone and self.vision.manual_center:
+                dz = self.vision.manual_danger_zone
+                self.planner.update_danger_zone(
+                    dz['x_min'], dz['x_max'],
+                    dz['y_min'], dz['y_max']
+                )
+                cx, cy = self.vision.manual_center
+                self.strategy.update_center(cx, cy)
+                print(f"[INIT] Manual Center set to: ({cx}, {cy})")
+                print(f"[INIT] Manual Danger Zone set to: {dz}")
+            else:
+                print("\n[CRITICAL ERROR] Danger Zone not found in manual_dropzones.json!")
+                print("Please run 'python setup_dropzones.py' to draw the Danger Zone.\n")
+                self.set_state('FINISH')
+                return
+
+            print(f"[INIT] Loaded Drop Zones: {self.drop_zones}")
+            # ข้ามไปทำงานทันที ไม่ต้องรอ
+            self._state_timer = 0
+            self.state = "SCAN_OUTER_RING"
             return
             
         elif self.state == "SCAN_OUTER_RING":

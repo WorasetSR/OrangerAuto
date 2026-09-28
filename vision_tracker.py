@@ -90,7 +90,17 @@ class VisionTracker:
 
         with open(dropzones_file, 'r') as f:
             data = json.load(f)
-        self.manual_drop_zones = {color: tuple(pos) for color, pos in data.items()}
+            
+        # Support both old and new format
+        if "drop_zones" in data:
+            self.manual_drop_zones = {color: tuple(pos) for color, pos in data["drop_zones"].items()}
+            self.manual_danger_zone = data.get("danger_zone", None)
+            self.manual_center = data.get("center", None)
+        else:
+            self.manual_drop_zones = {color: tuple(pos) for color, pos in data.items()}
+            self.manual_danger_zone = None
+            self.manual_center = None
+            
         print(f"[INFO] Loaded {len(self.manual_drop_zones)} fixed drop zones from {dropzones_file}")
         return True
 
