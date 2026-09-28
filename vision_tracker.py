@@ -62,6 +62,12 @@ class VisionTracker:
         self.manual_drop_zones = {}
         self.load_manual_dropzones()
 
+        # Robot dimensions relative to ArUco center (converted to mm)
+        self.car_dist_front = 65    # 6.5 cm
+        self.car_dist_back = 90     # 9.0 cm
+        self.car_dist_left = 100    # 10.0 cm
+        self.car_dist_right = 100   # 10.0 cm
+
         # --- Persistent stone tracking ---
         # Previously each stone got a fresh id every frame (id = scan order of
         # contours), so "id" was meaningless across frames and the robot had no
@@ -236,7 +242,7 @@ class VisionTracker:
             
         frame = cv2.resize(frame, (640, 480))
         state = {
-            "robot": {"pos": None, "heading": 0, "mouth_pos": None},
+            "robot": {"pos": None, "heading": 0, "mouth_pos": None, "footprint": None},
             "stones": [],
             "drop_zones": dict(self.manual_drop_zones)  # fixed, calibrated once — not re-detected per frame
         }
@@ -272,10 +278,30 @@ class VisionTracker:
             mY = center_mm[1] + 110 * math.sin(angle_rad)
             state["robot"]["mouth_pos"] = (int(mX), int(mY))
             
+            # Calculate robot footprint (4 corners in MM)
+            local_corners = [
+                (self.car_dist_front, -self.car_dist_left),   # Front-Left
+                (self.car_dist_front, self.car_dist_right),   # Front-Right
+                (-self.car_dist_back, self.car_dist_right),   # Back-Right
+                (-self.car_dist_back, -self.car_dist_left)    # Back-Left
+            ]
+            footprint_mm = []
+            cos_h = math.cos(angle_rad)
+            sin_h = math.sin(angle_rad)
+            for lx, ly in local_corners:
+                global_x = center_mm[0] + lx * cos_h - ly * sin_h
+                global_y = center_mm[1] + lx * sin_h + ly * cos_h
+                footprint_mm.append((global_x, global_y))
+            
+            state["robot"]["footprint"] = footprint_mm
+            
+            # Draw marker corners
             cv2.polylines(frame, [marker_corners.astype(int)], True, (0, 255, 0), 2)
             
         # 2. Detect Stones (HSV Masking)
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        # Apply Gaussian Blur to reduce camera noise (flickering)
+        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
         raw_stone_detections = []  # collected first, then matched to persistent ids below
         for color_name, bounds in self.hsv_ranges.items():
             if color_name == "yellow": continue 

@@ -71,6 +71,15 @@ def main():
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             cv2.putText(frame, "MOUTH", (m_px[0] + 10, m_px[1]),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+            # วาดกรอบพื้นที่ตัวรถ (Robot Footprint)
+            if "footprint" in robot and robot["footprint"] is not None:
+                footprint_px = [mm_to_px(H, pt) for pt in robot["footprint"]]
+                footprint_contour = np.array([footprint_px], dtype=np.int32)
+                cv2.polylines(frame, footprint_contour, True, (255, 100, 100), 2) # สีฟ้า/น้ำเงิน
+                # แปะป้ายบอกว่านี่คือขอบเขตรถ
+                cv2.putText(frame, "BOUNDS", (footprint_px[0][0], footprint_px[0][1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 100, 100), 2)
                         
             # ลองสร้างเส้นทางสมมติไปยังหินก้อนแรก เพื่อแสดงการทำงานของ Waypoint
             if state["stones"] and danger_zone is not None:
