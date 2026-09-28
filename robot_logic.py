@@ -49,7 +49,7 @@ class GemstoneRobotController:
         # boundary mask, so detection ignores the border tiles) and
         # manual_dropzones.json (fixed drop-zone positions) in its own __init__ —
         # the same calibrated files debug_vision.py uses. No need to load them again here.
-        self.vision = VisionTracker()
+        self.vision = VisionTracker(camera_idx=1)
         self.strategy = StrategyEngine()
         self.planner = PathPlanner()
         

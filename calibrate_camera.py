@@ -11,7 +11,7 @@ def click_event(event, x, y, flags, param):
         print(f"คลิกจุดที่ {len(clicked_points)}: พิกัด (X={x}, Y={y})")
 
 def main():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     
     cv2.namedWindow("Camera Calibration")
     # เปิดรับการคลิกเมาส์

@@ -13,7 +13,7 @@ def mm_to_px(H_matrix, mm_pos):
 
 def main():
     print("กำลังเปิดกล้องและโหลดระบบ...")
-    tracker = VisionTracker()  # calibration.json is loaded automatically inside __init__
+    tracker = VisionTracker(camera_idx=1)  # calibration.json is loaded automatically inside __init__
     planner = PathPlanner()
     
     cv2.namedWindow("Debug Vision (Monitor)", cv2.WINDOW_NORMAL)

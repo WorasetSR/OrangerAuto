@@ -8,7 +8,7 @@ class PathPlanner:
         self.last_heading_error = 0
         
         # Base speed for navigation
-        self.base_speed = 240
+        self.base_speed = 200
         self.max_speed = 255
         
         self.FIELD_W = 2100
@@ -108,7 +108,7 @@ class PathPlanner:
         # If the angle is severely wrong (e.g. > 45 degrees), just spin in place
         if abs(error) > math.radians(45):
             # Spin
-            spin_speed = 255
+            spin_speed = 200
             if error > 0:
                 vL, vR = -spin_speed, spin_speed # Turn right
             else:

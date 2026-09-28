@@ -6,7 +6,7 @@ from vision_tracker import VisionTracker
 
 def main():
     print("กำลังเปิดกล้องสำหรับตั้งค่า Drop Zone ด้วยมือ (Manual Setup)...")
-    tracker = VisionTracker()
+    tracker = VisionTracker(camera_idx=1)
     
     colors_to_set = ['red', 'blue', 'green', 'purple', 'cyan', 'orange']
     current_color_idx = 0

@@ -151,7 +151,7 @@ def on_mouse_click(event, x, y, flags, param):
 
 def main():
     load_config()
-    cap = cv2.VideoCapture(0) # Change to 1 if using external webcam
+    cap = cv2.VideoCapture(1) # Change to 1 if using external webcam
     
     cv2.namedWindow('Calibration')
     
