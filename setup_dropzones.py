@@ -6,7 +6,7 @@ from vision_tracker import VisionTracker
 
 def main():
     print("กำลังเปิดกล้องสำหรับตั้งค่า Drop Zone ด้วยมือ (Manual Setup)...")
-    tracker = VisionTracker(camera_idx=1)
+    tracker = VisionTracker(camera_idx=0)
     
     setup_steps = ['Danger Zone (Top-Left)', 'Danger Zone (Bottom-Right)', 'red', 'blue', 'green', 'purple', 'cyan', 'orange']
     current_step_idx = 0
