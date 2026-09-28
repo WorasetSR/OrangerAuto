@@ -319,7 +319,10 @@ class GemstoneRobotController:
                       f"dist={dist:.0f}mm vL={vL} vR={vR} aligned={aligned}")
 
             if aligned and dist < 200: # 20cm away, go straight
-                self.send_command(0, 0, door_cmd="collect") # MAJ-5: Open door early
+                # คำนวณขนาดประตูที่ต้องเปิด (ความกว้างหิน + ระยะเผื่อ 20mm)
+                # target_stone มีคีย์ 'width' ที่เพิ่งเพิ่มใน vision_tracker
+                target_width = self.target_stone.get('width', 40) + 20
+                self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดตามขนาดหิน
                 self.planner.reset_pid()
                 self._state_timer = time.time() 
                 self.state = "DRIVE_INGEST"

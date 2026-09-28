@@ -166,6 +166,7 @@ class VisionTracker:
             if best_idx is not None:
                 d = unmatched.pop(best_idx)
                 track['pos'] = d['pos']
+                track['width'] = d.get('width', track.get('width', 40))
                 track['misses'] = 0
             else:
                 track['misses'] += 1
@@ -178,11 +179,11 @@ class VisionTracker:
         for d in unmatched:
             tid = self._next_stone_id
             self._next_stone_id += 1
-            self._tracked_stones[tid] = {'pos': d['pos'], 'color': d['color'], 'misses': 0}
+            self._tracked_stones[tid] = {'pos': d['pos'], 'color': d['color'], 'width': d.get('width', 40), 'misses': 0}
 
         # 4. Output only stones actually seen this frame (misses == 0) — used for
         # picking NEW targets (we don't want to pick a stale/ghost position).
-        return [{'id': tid, 'color': t['color'], 'pos': t['pos']}
+        return [{'id': tid, 'color': t['color'], 'pos': t['pos'], 'width': t.get('width', 40)}
                 for tid, t in self._tracked_stones.items() if t['misses'] == 0]
 
     def get_stone_by_id(self, stone_id):
@@ -199,7 +200,7 @@ class VisionTracker:
         t = self._tracked_stones.get(stone_id)
         if t is None:
             return None
-        return {'id': stone_id, 'color': t['color'], 'pos': t['pos'], 'misses': t['misses']}
+        return {'id': stone_id, 'color': t['color'], 'pos': t['pos'], 'width': t.get('width', 40), 'misses': t['misses']}
 
     def load_config(self):
         if os.path.exists(self.config_file):
@@ -353,8 +354,16 @@ class VisionTracker:
                         cX = int(M["m10"] / M["m00"])
                         cY = int(M["m01"] / M["m00"])
                         pos_mm = self.px_to_mm((cX, cY))
+                        
+                        # คำนวณความกว้างของก้อนหินเพื่อสั่งเปิดประตู
+                        rect = cv2.minAreaRect(cnt)
+                        width_px = max(rect[1][0], rect[1][1])
+                        # แปลงความกว้างจากพิกเซลเป็นมิลลิเมตร (รัศมี * 2)
+                        edge_px = (cX + int(width_px / 2), cY)
+                        edge_mm = self.px_to_mm(edge_px)
+                        width_mm = int(math.hypot(edge_mm[0] - pos_mm[0], edge_mm[1] - pos_mm[1]) * 2)
 
-                        raw_stone_detections.append({"color": color_name, "pos": pos_mm})
+                        raw_stone_detections.append({"color": color_name, "pos": pos_mm, "width": width_mm})
                         cv2.circle(frame, (cX, cY), 5, (255, 255, 255), -1)
                 # NOTE: drop zones are no longer detected here — they're fixed positions
                 # loaded once from manual_dropzones.json (see load_manual_dropzones).
