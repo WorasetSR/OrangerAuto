@@ -326,6 +326,13 @@ class VisionTracker:
             # picked up as a stone or zone, regardless of color.
             if self.field_mask is not None:
                 mask = cv2.bitwise_and(mask, self.field_mask)
+                
+            # Mask out all manual drop zones (radius ~100mm) so they are NEVER detected as stones
+            for dz_color, dz_pos in self.manual_drop_zones.items():
+                dz_px = self._mm_to_px_local(dz_pos)
+                edge_px = self._mm_to_px_local((dz_pos[0] + 100, dz_pos[1]))
+                radius_px = int(math.hypot(edge_px[0] - dz_px[0], edge_px[1] - dz_px[1]))
+                cv2.circle(mask, dz_px, radius_px, 0, -1)
             
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for cnt in contours:
