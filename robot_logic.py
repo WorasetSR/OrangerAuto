@@ -56,6 +56,8 @@ class GemstoneRobotController:
         # Navigation
         self.waypoints = []
         self.current_waypoint_idx = 0
+        self.stone_waypoints = []
+        self.current_stone_wp_idx = 0
         
         # Timers
         self._state_timer = 0
@@ -300,6 +302,18 @@ class GemstoneRobotController:
                 self.state = "SCAN_OUTER_RING"
                 return
             self.target_stone = locked_stone
+            
+            # เช็คว่าเส้นทางขับชน Danger Zone หรือไม่
+            needs_reroute = self.planner.is_inside_danger(robot_pos) or self.planner.line_crosses_danger(robot_pos, self.target_stone['pos'])
+            if needs_reroute:
+                self.stone_waypoints = self.planner.generate_perimeter_waypoints(robot_pos, self.target_stone['pos'])
+                if len(self.stone_waypoints) > 1:
+                    print(f"[NAV] Danger Zone detected in path to stone. Rerouting via {self.stone_waypoints[:-1]}")
+                    self.current_stone_wp_idx = 0
+                    self.planner.reset_pid()
+                    self._state_timer = time.time()
+                    self.state = "NAV_TO_STONE_WP"
+                    return
 
             vL, vR, dist, aligned = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
             self.send_command(vL, vR)
@@ -343,9 +357,37 @@ class GemstoneRobotController:
         # =======================================================================================
         # 🟢 ZONE: ระบบเก็บหิน (STONE COLLECTION LOGIC)
         # ⚠️ เพื่อนร่วมทีมที่ทำระบบเก็บหิน ให้นำโค้ดมาเสียบที่ช่วงสเตทด้านล่างนี้ได้เลยครับ!
-        # (สเตท DOOR_OPENING -> DRIVE_INGEST -> LOCK_DOORS -> BACKOUT_CLEAR -> CHECK_CAPACITY)
+        # (สเตท NAV_TO_STONE_WP -> DOOR_OPENING -> DRIVE_INGEST -> LOCK_DOORS -> BACKOUT_CLEAR -> CHECK_CAPACITY)
         # =======================================================================================
         
+        elif self.state == "NAV_TO_STONE_WP":
+            if not self.target_stone:
+                self.state = "SCAN_OUTER_RING"
+                return
+            
+            # ถ้าถึง waypoint รองสุดท้าย (พ้นอันตรายแล้ว) ให้กลับไป ALIGN_APPROACH เพื่อใช้กล้องเล็งเป้าจริง
+            if self.current_stone_wp_idx >= len(self.stone_waypoints) - 1:
+                self.planner.reset_pid()
+                self._state_timer = time.time()
+                self.state = "ALIGN_APPROACH"
+                return
+                
+            # Timeout สำหรับ waypoint ที่ไปไม่ถึงสักที
+            if time.time() - self._state_timer > 6.0:
+                print(f"[WARNING] Stone Waypoint {self.current_stone_wp_idx} Timeout! Skipping.")
+                self.current_stone_wp_idx += 1
+                self.planner.reset_pid()
+                self._state_timer = time.time()
+                
+            target_wp = self.stone_waypoints[self.current_stone_wp_idx]
+            vL, vR, dist, _ = self.planner.calculate_steering(robot_pos, robot_heading, target_wp)
+            self.send_command(vL, vR)
+            
+            if dist < 100: # ถึง waypoint ที่ใช้อ้อมแล้ว
+                self.current_stone_wp_idx += 1
+                self.planner.reset_pid()
+                self._state_timer = time.time()
+
         elif self.state == "DOOR_OPENING":
             self.send_command(0, 0)  # หยุดรถรอประตูเปิด
             if time.time() - self._state_timer > 0.4:  # รอ 400ms ให้ servo กางจนสุด

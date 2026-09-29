@@ -48,34 +48,56 @@ class PathPlanner:
         # This is a safe over-estimation.
         return True
 
-    def generate_perimeter_waypoints(self, current_pos, drop_zone):
+    def generate_perimeter_waypoints(self, current_pos, target_pos):
         """
         Creates a list of waypoints that routes around the central danger zone.
         """
         waypoints = []
         
         # Check if we are inside or crossing the danger zone
-        needs_reroute = self.is_inside_danger(current_pos) or self.line_crosses_danger(current_pos, drop_zone)
+        needs_reroute = self.is_inside_danger(current_pos) or self.line_crosses_danger(current_pos, target_pos)
 
         if needs_reroute:
-            # Determine if top route or bottom route is closer
-            dist_to_top = current_pos[1]
-            dist_to_bottom = self.FIELD_H - current_pos[1]
+            # 4 safe highways around the danger zone
+            safe_top_y = 300
+            safe_bot_y = 900
+            safe_left_x = 400
+            safe_right_x = 1700
             
-            # Use 300 / 900 to avoid edges where Drop Zones might be
-            safe_y = 300 if dist_to_top < dist_to_bottom else 900
+            if self.DANGER_ZONE:
+                safe_top_y = min(self.DANGER_ZONE['y_min'] - 100, 300)
+                safe_bot_y = max(self.DANGER_ZONE['y_max'] + 100, 900)
+                safe_left_x = min(self.DANGER_ZONE['x_min'] - 100, 400)
+                safe_right_x = max(self.DANGER_ZONE['x_max'] + 100, 1700)
             
-            # NEW-2 FIX: Avoid duplicate waypoints
-            # 1st waypoint: Move to the safe highway (align horizontally)
+            # Decide which horizontal highway to use based on current position
+            safe_y = safe_top_y if current_pos[1] < self.FIELD_H / 2 else safe_bot_y
+            target_safe_y = safe_top_y if target_pos[1] < self.FIELD_H / 2 else safe_bot_y
+            
+            # 1. Get out to the nearest safe Y highway
             waypoints.append((current_pos[0], safe_y))
-                
-            # 2nd waypoint: Move horizontally across the safe highway
-            waypoints.append((drop_zone[0], safe_y))
             
-        # Final waypoint: The drop zone
-        waypoints.append(drop_zone)
+            # 2. Check if we need to cross the danger zone vertically
+            if safe_y != target_safe_y:
+                # Cross vertically via a safe X highway (choose the one closer to target)
+                safe_x = safe_left_x if target_pos[0] < self.FIELD_W / 2 else safe_right_x
+                waypoints.append((safe_x, safe_y))          # Move horizontally to vertical highway
+                waypoints.append((safe_x, target_safe_y))   # Move vertically across field
+                waypoints.append((target_pos[0], target_safe_y)) # Move horizontally to target's column
+            else:
+                # Same side, just move horizontally to target's column
+                waypoints.append((target_pos[0], safe_y))
+            
+        # Final waypoint: The target itself
+        waypoints.append(target_pos)
         
-        return waypoints
+        # Clean up duplicate consecutive waypoints
+        clean_wps = []
+        for wp in waypoints:
+            if not clean_wps or (abs(clean_wps[-1][0] - wp[0]) > 10 or abs(clean_wps[-1][1] - wp[1]) > 10):
+                clean_wps.append(wp)
+                
+        return clean_wps
 
     def calculate_steering(self, robot_pos, robot_heading, target_pos):
         """
