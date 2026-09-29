@@ -121,7 +121,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       // ดึงค่าคำสั่งประตู
       if (doc.containsKey("door_cmd")) {
         const char* door_cmd = doc["door_cmd"];
-        if (strcmp(door_cmd, "collect") == 0) {
+        
+        // เช็คว่ามีคำว่า "open:" นำหน้าหรือไม่
+        if (strncmp(door_cmd, "open:", 5) == 0) {
+          int width_mm = atoi(door_cmd + 5); // ตัด 5 ตัวแรก ("open:") ออก แล้วแปลงเป็นตัวเลข
+          
+          // แปลงความกว้าง (mm) เป็นสัดส่วน (0.0 - 1.0)
+          // สมมติว่าประตูเปิดสุดกว้างประมาณ 90mm (สามารถปรับเลขนี้ให้ตรงกับความเป็นจริงของหุ่นได้)
+          float MAX_DOOR_WIDTH_MM = 90.0;
+          float fraction = (float)width_mm / MAX_DOOR_WIDTH_MM;
+          
+          if (fraction > 1.0) fraction = 1.0;
+          if (fraction < 0.0) fraction = 0.0;
+          
+          doorControl_manualSetOpen(fraction); // สั่งเปิดตามสัดส่วน
+          Serial.printf("Dynamic Door Open: %d mm (fraction: %.2f)\n", width_mm, fraction);
+          
+        } else if (strcmp(door_cmd, "collect") == 0) {
           doorControl_manualOpenCollect();
         } else if (strcmp(door_cmd, "release") == 0) {
           doorControl_manualOpenFull();
