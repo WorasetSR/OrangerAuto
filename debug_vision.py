@@ -100,13 +100,13 @@ def main():
                     cv2.putText(frame, "PATH", (r_px[0] + 10, r_px[1] + 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
                                 
-        # 4. วาด Drop Zones (ขอบเขตจริงรัศมี 8.5 ซม.)
+        # 4. วาด Drop Zones (ขอบเขตจริงรัศมี 90 mm)
         for color, pos_mm in state["drop_zones"].items():
             dz_px = mm_to_px(H, pos_mm)
             
-            # วาดรัศมีวงกลมแสดงขอบเขต Drop Zone รัศมี 85 mm (8.5 ซม.)
+            # วาดรัศมีวงกลมแสดงขอบเขต Drop Zone รัศมี 90 mm
             # คำนวณพิกัดขอบบนเพื่อหารัศมีในหน่วยพิกเซล
-            edge_px = mm_to_px(H, (pos_mm[0] + 85, pos_mm[1]))
+            edge_px = mm_to_px(H, (pos_mm[0] + 90, pos_mm[1]))
             radius_px = abs(edge_px[0] - dz_px[0])
             
             # ตีเส้นวงกลมและจุดศูนย์กลาง

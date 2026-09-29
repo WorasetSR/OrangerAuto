@@ -17,8 +17,8 @@ class StrategyEngine:
     def get_valid_stones(self, stones, drop_zones):
         """Filter out stones that are already in their respective drop zones."""
         valid = []
-        # รัศมี Drop zone จริงคือ 8.5 cm (85 mm) + เผื่อระยะหินกระเด็นขอบๆ อีกนิดหน่อย เป็น 120 mm
-        DROP_RADIUS = 120 
+        # รัศมี Drop zone จริงคือ 8.5 cm (85 mm) + เผื่อระยะหินกระเด็นขอบๆ อีกนิดหน่อย เป็น 90 mm (อิงตาม MAJ-3)
+        DROP_RADIUS = 90 
         for s in stones:
             in_drop = False
             # MAJ-2 FIX: ตรวจสอบเฉพาะ Drop zone ที่สีตรงกับหิน

@@ -102,7 +102,17 @@ class VisionTracker:
             self.manual_center = None
             
         print(f"[INFO] Loaded {len(self.manual_drop_zones)} fixed drop zones from {dropzones_file}")
+        self._generate_blackout_mask()
         return True
+
+    def _generate_blackout_mask(self):
+        """Precomputes the drop zone blackout mask (90mm radius) to save CPU."""
+        self._dz_blackout_mask = np.ones((480, 640), dtype=np.uint8) * 255
+        for dz_color, dz_pos in self.manual_drop_zones.items():
+            dz_px = self._mm_to_px_local(dz_pos)
+            edge_px = self._mm_to_px_local((dz_pos[0] + 90, dz_pos[1]))
+            radius_px = int(math.hypot(edge_px[0] - dz_px[0], edge_px[1] - dz_px[1]))
+            cv2.circle(self._dz_blackout_mask, dz_px, radius_px, 0, -1)
 
     def load_calibration(self, calibration_file="calibration.json"):
         if not os.path.exists(calibration_file):
@@ -338,12 +348,9 @@ class VisionTracker:
             if self.field_mask is not None:
                 mask = cv2.bitwise_and(mask, self.field_mask)
                 
-            # Mask out all manual drop zones (radius ~100mm) so they are NEVER detected as stones
-            for dz_color, dz_pos in self.manual_drop_zones.items():
-                dz_px = self._mm_to_px_local(dz_pos)
-                edge_px = self._mm_to_px_local((dz_pos[0] + 100, dz_pos[1]))
-                radius_px = int(math.hypot(edge_px[0] - dz_px[0], edge_px[1] - dz_px[1]))
-                cv2.circle(mask, dz_px, radius_px, 0, -1)
+            # Apply precomputed blackout mask for drop zones (90mm radius)
+            if hasattr(self, '_dz_blackout_mask') and self._dz_blackout_mask is not None:
+                mask = cv2.bitwise_and(mask, self._dz_blackout_mask)
             
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for cnt in contours:
@@ -355,13 +362,24 @@ class VisionTracker:
                         cY = int(M["m01"] / M["m00"])
                         pos_mm = self.px_to_mm((cX, cY))
                         
-                        # คำนวณความกว้างของก้อนหินเพื่อสั่งเปิดประตู
+                        # คำนวณความกว้างของก้อนหินเพื่อสั่งเปิดประตู (MAJ-1 Fix)
                         rect = cv2.minAreaRect(cnt)
-                        width_px = max(rect[1][0], rect[1][1])
-                        # แปลงความกว้างจากพิกเซลเป็นมิลลิเมตร (รัศมี * 2)
-                        edge_px = (cX + int(width_px / 2), cY)
-                        edge_mm = self.px_to_mm(edge_px)
-                        width_mm = int(math.hypot(edge_mm[0] - pos_mm[0], edge_mm[1] - pos_mm[1]) * 2)
+                        box = cv2.boxPoints(rect)
+                        
+                        # หาความยาวของด้านที่ยาวที่สุดในสเกลพิกเซลก่อน
+                        d01 = math.hypot(box[0][0]-box[1][0], box[0][1]-box[1][1])
+                        d12 = math.hypot(box[1][0]-box[2][0], box[1][1]-box[2][1])
+                        
+                        # แปลงจุดปลายทั้งสองด้านของแกนที่ยาวที่สุดเป็น mm
+                        if d01 > d12:
+                            p1_mm = self.px_to_mm(tuple(box[0]))
+                            p2_mm = self.px_to_mm(tuple(box[1]))
+                        else:
+                            p1_mm = self.px_to_mm(tuple(box[1]))
+                            p2_mm = self.px_to_mm(tuple(box[2]))
+                            
+                        # คำนวณระยะห่างระหว่างจุดในสเกล mm เพื่อแก้ปัญหาความบิดเบี้ยว
+                        width_mm = int(math.hypot(p1_mm[0]-p2_mm[0], p1_mm[1]-p2_mm[1]))
 
                         raw_stone_detections.append({"color": color_name, "pos": pos_mm, "width": width_mm})
                         cv2.circle(frame, (cX, cY), 5, (255, 255, 255), -1)
