@@ -50,6 +50,7 @@ class VisionTracker:
             [0, scale_y, 0],
             [0, 0, 1]
         ], dtype=np.float32)
+        self._inv_H = np.linalg.inv(self.H_matrix)
 
         # Auto-load the latest calibration saved by calibrate_camera.py, if present,
         # so every script uses the exact same, current homography.
@@ -150,6 +151,7 @@ class VisionTracker:
         self.H_matrix, _ = cv2.findHomography(
             np.array(src_points, dtype=np.float32),
             np.array(dst_points, dtype=np.float32))
+        self._inv_H = np.linalg.inv(self.H_matrix)
 
     def _update_stone_tracks(self, detections):
         """
@@ -227,9 +229,8 @@ class VisionTracker:
 
     def _mm_to_px_local(self, mm_pos):
         """Inverse of px_to_mm — only used for drawing debug overlays (e.g. stone id labels)."""
-        inv_H = np.linalg.inv(self.H_matrix)
         pt = np.array([[[mm_pos[0], mm_pos[1]]]], dtype=np.float32)
-        dst = cv2.perspectiveTransform(pt, inv_H)
+        dst = cv2.perspectiveTransform(pt, self._inv_H)
         return (int(dst[0][0][0]), int(dst[0][0][1]))
 
     def calculate_dynamic_zones(self, stones):
@@ -294,9 +295,9 @@ class VisionTracker:
             angle_rad = math.atan2(front_mid_mm[1] - center_mm[1], front_mid_mm[0] - center_mm[0])
             state["robot"]["heading"] = angle_rad
             
-            # Calculate mouth pos (110mm offset in front of marker)
-            mX = center_mm[0] + 110 * math.cos(angle_rad)
-            mY = center_mm[1] + 110 * math.sin(angle_rad)
+            # Calculate mouth pos (70mm offset in front of marker, อัปเดตตามสเปคใหม่)
+            mX = center_mm[0] + 70 * math.cos(angle_rad)
+            mY = center_mm[1] + 70 * math.sin(angle_rad)
             state["robot"]["mouth_pos"] = (int(mX), int(mY))
             
             # Calculate robot footprint (4 corners in MM)

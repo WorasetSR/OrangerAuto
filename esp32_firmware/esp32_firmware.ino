@@ -126,16 +126,19 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         if (strncmp(door_cmd, "open:", 5) == 0) {
           int width_mm = atoi(door_cmd + 5); // ตัด 5 ตัวแรก ("open:") ออก แล้วแปลงเป็นตัวเลข
           
-          // แปลงความกว้าง (mm) เป็นสัดส่วน (0.0 - 1.0)
-          // สมมติว่าประตูเปิดสุดกว้างประมาณ 90mm (สามารถปรับเลขนี้ให้ตรงกับความเป็นจริงของหุ่นได้)
-          float MAX_DOOR_WIDTH_MM = 90.0;
-          float fraction = (float)width_mm / MAX_DOOR_WIDTH_MM;
+          float MAX_DOOR_WIDTH_MM = 90.0; // ความกว้างตอนประตูอ้า 90 องศา
           
-          if (fraction > 1.0) fraction = 1.0;
-          if (fraction < 0.0) fraction = 0.0;
+          // 1. หาค่าสัดส่วนความกว้างแบบเส้นตรงก่อน (0.0 ถึง 1.0)
+          float linear_ratio = (float)width_mm / MAX_DOOR_WIDTH_MM;
+          if (linear_ratio > 1.0) linear_ratio = 1.0;
+          if (linear_ratio < 0.0) linear_ratio = 0.0;
           
-          doorControl_manualSetOpen(fraction); // สั่งเปิดตามสัดส่วน
-          Serial.printf("Dynamic Door Open: %d mm (fraction: %.2f)\n", width_mm, fraction);
+          // 2. ชดเชยความโค้งของบานพับด้วยสมการ Arc Cosine
+          // สูตร: fraction = acos(1 - ratio) / (PI / 2)
+          float fraction = acos(1.0 - linear_ratio) / (PI / 2.0);
+          
+          doorControl_manualSetOpen(fraction); // สั่งเปิดตามสัดส่วนที่ชดเชยแล้ว
+          Serial.printf("Dynamic Door Open: %d mm (Linear: %.2f -> Trig Adjusted: %.2f)\n", width_mm, linear_ratio, fraction);
           
         } else if (strcmp(door_cmd, "collect") == 0) {
           doorControl_manualOpenCollect();

@@ -318,21 +318,32 @@ class GemstoneRobotController:
                       f"target_pos={self.target_stone['pos']} target_angle={target_angle_deg:.1f}deg "
                       f"dist={dist:.0f}mm vL={vL} vR={vR} aligned={aligned}")
 
-            if aligned and dist < 200: # 20cm away, go straight
-                # คำนวณขนาดประตูที่ต้องเปิด (ความกว้างหิน + ระยะเผื่อ 20mm)
-                # target_stone มีคีย์ 'width' ที่เพิ่งเพิ่มใน vision_tracker
-                target_width = self.target_stone.get('width', 40) + 20
-                print(f"[ACTION] Aligned & Close! Opening door to {target_width}mm.")
-                self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดตามขนาดหิน
-                self.planner.reset_pid()
-                self._state_timer = time.time() 
-                self.state = "DRIVE_INGEST"
+            if aligned:
+                # คำนวณระยะห่างจาก "ปาก" ถึง "หิน"
+                mouth_pos = state_data["robot"]["mouth_pos"]
+                dist_from_mouth = math.hypot(mouth_pos[0] - self.target_stone['pos'][0],
+                                             mouth_pos[1] - self.target_stone['pos'][1])
+                
+                # ถ้าหินอยู่ห่างจากปากน้อยกว่า 120mm (อ้าประตูล่วงหน้าแต่เนิ่นๆ)
+                if dist_from_mouth < 120:
+                    target_width = self.target_stone.get('width', 40) + 20
+                    print(f"[ACTION] Aligned & Close! Opening door to {target_width}mm.")
+                    self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดตามขนาดหิน
+                    self.planner.reset_pid()
+                    self._state_timer = time.time() 
+                    self.state = "DOOR_OPENING"
                 
         # =======================================================================================
         # 🟢 ZONE: ระบบเก็บหิน (STONE COLLECTION LOGIC)
         # ⚠️ เพื่อนร่วมทีมที่ทำระบบเก็บหิน ให้นำโค้ดมาเสียบที่ช่วงสเตทด้านล่างนี้ได้เลยครับ!
-        # (สเตท DRIVE_INGEST -> LOCK_DOORS -> BACKOUT_CLEAR -> CHECK_CAPACITY)
+        # (สเตท DOOR_OPENING -> DRIVE_INGEST -> LOCK_DOORS -> BACKOUT_CLEAR -> CHECK_CAPACITY)
         # =======================================================================================
+        
+        elif self.state == "DOOR_OPENING":
+            self.send_command(0, 0)  # หยุดรถรอประตูเปิด
+            if time.time() - self._state_timer > 0.4:  # รอ 400ms ให้ servo กางจนสุด
+                self._state_timer = time.time()
+                self.state = "DRIVE_INGEST"
         
         elif self.state == "DRIVE_INGEST":
             if time.time() - self._state_timer > 5.0:
@@ -465,5 +476,8 @@ if __name__ == "__main__":
         while True:
             robot.update()
     except KeyboardInterrupt:
+        robot.send_command(0, 0, door_cmd="close")
         robot.vision.close()
+        if robot.ws:
+            robot.ws.close()
         print("System shutting down...")
