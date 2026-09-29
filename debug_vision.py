@@ -44,8 +44,8 @@ def main():
             cv2.putText(frame, color.upper(), (px_pos[0] + 10, px_pos[1] - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
                         
-        # 2. วาด Danger Zone (โซนอันตรายสีแดง)
-        center, danger_zone = tracker.calculate_dynamic_zones(state["stones"])
+        # 2. วาด Danger Zone (โซนอันตรายสีแดง - ดึงจากที่ Calibrate ล็อกไว้)
+        danger_zone = tracker.manual_danger_zone
         if danger_zone is not None:
             # แปลงพิกัดโซนจาก MM กลับเป็นพิกเซลเพื่อวาดลงจอ
             pt1_mm = (danger_zone["x_min"], danger_zone["y_min"])
@@ -54,7 +54,7 @@ def main():
             pt2_px = mm_to_px(H, pt2_mm)
             # วาดกรอบสี่เหลี่ยมสีแดง
             cv2.rectangle(frame, pt1_px, pt2_px, (0, 0, 255), 2)
-            cv2.putText(frame, "DANGER ZONE", (pt1_px[0], pt1_px[1] - 10),
+            cv2.putText(frame, "LOCKED DANGER ZONE", (pt1_px[0], pt1_px[1] - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                         
         # 3. วาดรถหุ่นยนต์และ Waypoint 
