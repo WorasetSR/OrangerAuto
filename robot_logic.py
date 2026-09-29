@@ -322,6 +322,7 @@ class GemstoneRobotController:
                 # คำนวณขนาดประตูที่ต้องเปิด (ความกว้างหิน + ระยะเผื่อ 20mm)
                 # target_stone มีคีย์ 'width' ที่เพิ่งเพิ่มใน vision_tracker
                 target_width = self.target_stone.get('width', 40) + 20
+                print(f"[ACTION] Aligned & Close! Opening door to {target_width}mm.")
                 self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดตามขนาดหิน
                 self.planner.reset_pid()
                 self._state_timer = time.time() 
