@@ -395,8 +395,11 @@ class GemstoneRobotController:
                 self.state = "DRIVE_INGEST"
         
         elif self.state == "DRIVE_INGEST":
+            # Condition A: จับเวลา 5 วินาที เป็นระบบฉุกเฉินถ้ารถติดกำแพง
             if time.time() - self._state_timer > 5.0:
                 print("[WARNING] Ingest Timeout! Aborting stone.")
+                # แอบจำพิกัดหินไว้ก่อนหุบประตู เพื่อเอาไปให้ VERIFY_COLLECTION ตรวจสอบ
+                self._last_target_pos = self.target_stone['pos']
                 self._state_timer = time.time()
                 self.state = "LOCK_DOORS"
                 return
@@ -404,11 +407,8 @@ class GemstoneRobotController:
             locked_stone = self.vision.get_stone_by_id(self.target_stone_id)
             if locked_stone is not None:
                 self.target_stone = locked_stone
-            # else: track expired (likely just scooped up / occluded by the mouth
-            # mechanism) — keep driving to the last known position since we're
-            # already this close, rather than aborting the ingest.
                 
-            # พุ่งตรงอย่างเดียว (Blind Ram) เพื่อป้องกันปัญหามุมเลี้ยวแกว่งตอนเข้าใกล้หิน
+            # พุ่งตรงอย่างเดียว (Blind Ram) 
             vL, vR = 140, 140
             self.send_command(vL, vR)
             
@@ -416,10 +416,12 @@ class GemstoneRobotController:
             dist_to_stone = math.hypot(mouth_pos[0] - self.target_stone['pos'][0],
                                        mouth_pos[1] - self.target_stone['pos'][1])
             
+            # Condition B: ตัวสั่งเบรกและหุบประตู (ระยะใกล้พอ หรือ พุ่งนานพอ 1.5 วิ)
             if dist_to_stone < 30 or (time.time() - self._state_timer > 1.5):
                 self.send_command(0, 0)
-                self.stone_count += 1
-                self._loaded_color = self.target_color
+                # !! เอาคำสั่งบวกคะแนนออกไปแล้ว !!
+                # แอบจำพิกัดหินสุดท้ายเอาไว้ เพื่อให้สเตทต่อไปมาตรวจผลงาน
+                self._last_target_pos = self.target_stone['pos']
                 self._state_timer = time.time() 
                 self.state = "LOCK_DOORS"
                 return
@@ -433,12 +435,39 @@ class GemstoneRobotController:
                 self.state = "BACKOUT_CLEAR"
             
         elif self.state == "BACKOUT_CLEAR":
-            # ถอยหลังช้าๆ (-120) เป็นเวลา 0.8 วินาที เพื่อถอยตั้งหลักเบาๆ ไม่ให้กระเด็นไปไกล
+            # ถอยหลังช้าๆ (-120) เป็นเวลา 0.8 วินาที เพื่อถอยตั้งหลักและหลบทางให้กล้องมองเห็นพื้น
             self.send_command(-120, -120) 
             
             if time.time() - self._state_timer > 0.8:
                 self.send_command(0, 0) 
-                self.state = "CHECK_CAPACITY"
+                self._state_timer = time.time()
+                self.state = "VERIFY_COLLECTION" # ไปตรวจผลงานก่อนเช็คความจุ
+                
+        elif self.state == "VERIFY_COLLECTION":
+            # ให้รถหยุดนิ่ง 0.5 วินาที เพื่อรอกล้องจับภาพพื้นให้ชัดเจน (กันภาพเบลอตอนรถเบรก)
+            self.send_command(0, 0)
+            if time.time() - self._state_timer > 0.5:
+                # กวาดสายตาดูว่าพิกัดเดิมที่เราเพิ่งงับไป ยังมีหินสีเป้าหมายหลงเหลืออยู่ไหม
+                missed = False
+                for s in stones:
+                    if s['color'] == self.target_color:
+                        # วัดระยะห่างจากหินที่เห็น กับ พิกัดสุดท้ายที่เราจำไว้
+                        dist_from_last_pos = math.hypot(s['pos'][0] - self._last_target_pos[0],
+                                                        s['pos'][1] - self._last_target_pos[1])
+                        # ถ้าระยะห่างน้อยกว่า 80mm แปลว่ามันคือก้อนเดิมที่ยังไม่ขยับไปไหน!
+                        if dist_from_last_pos < 80:
+                            missed = True
+                            break
+                
+                if missed:
+                    print(f"[VERIFY] งับพลาด! หินยังอยู่ที่เดิม (ไม่บวกคะแนน)")
+                    # กลับไปเริ่มหาหินใหม่
+                    self.state = "SCAN_OUTER_RING"
+                else:
+                    print(f"[VERIFY] สำเร็จ! หินหายไปจากพื้นแล้ว (บวก 1 คะแนน)")
+                    self.stone_count += 1
+                    self._loaded_color = self.target_color
+                    self.state = "CHECK_CAPACITY"
             
         elif self.state == "CHECK_CAPACITY":
             if self.stone_count < self.max_capacity:
