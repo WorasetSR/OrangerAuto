@@ -326,9 +326,16 @@ class GemstoneRobotController:
                 
                 # ถ้าหินอยู่ห่างจากปากน้อยกว่า 120mm (อ้าประตูล่วงหน้าแต่เนิ่นๆ)
                 if dist_from_mouth < 120:
-                    target_width = self.target_stone.get('width', 40) + 20
-                    print(f"[ACTION] Aligned & Close! Opening door to {target_width}mm.")
-                    self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดตามขนาดหิน
+                    raw_width = self.target_stone.get('width', 40)
+                    
+                    # ล็อกขนาดเปิด 2 ระดับ: ใหญ่=50mm, เล็ก=40mm (ปรับเกณฑ์ที่ 40mm)
+                    if raw_width > 40: 
+                        target_width = 50
+                    else:
+                        target_width = 40
+                        
+                    print(f"[ACTION] Aligned & Close! Stone Width: {raw_width}mm -> Opening door to {target_width}mm.")
+                    self.send_command(0, 0, door_cmd=f"open:{target_width}") # สั่งเปิดประตูตามโหมดที่ล็อกไว้
                     self.planner.reset_pid()
                     self._state_timer = time.time() 
                     self.state = "DOOR_OPENING"
