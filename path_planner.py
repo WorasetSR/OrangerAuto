@@ -65,10 +65,10 @@ class PathPlanner:
             safe_right_x = 1700
             
             if self.DANGER_ZONE:
-                safe_top_y = min(self.DANGER_ZONE['y_min'] - 100, 300)
-                safe_bot_y = max(self.DANGER_ZONE['y_max'] + 100, 900)
-                safe_left_x = min(self.DANGER_ZONE['x_min'] - 100, 400)
-                safe_right_x = max(self.DANGER_ZONE['x_max'] + 100, 1700)
+                safe_top_y = min(self.DANGER_ZONE['y_min'] - 200, 300)
+                safe_bot_y = max(self.DANGER_ZONE['y_max'] + 200, 900)
+                safe_left_x = min(self.DANGER_ZONE['x_min'] - 200, 400)
+                safe_right_x = max(self.DANGER_ZONE['x_max'] + 200, 1700)
             
             # Decide which horizontal highway to use based on current position
             safe_y = safe_top_y if current_pos[1] < self.FIELD_H / 2 else safe_bot_y
