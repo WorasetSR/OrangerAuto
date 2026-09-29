@@ -100,21 +100,22 @@ def main():
                     cv2.putText(frame, "PATH", (r_px[0] + 10, r_px[1] + 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
                                 
-        # 4. วาด Drop Zones (ขอบเขตจริงรัศมี 90 mm)
-        for color, pos_mm in state["drop_zones"].items():
+        # 4. วาด Drop Zones (ขอบเขตจริงรัศมี 120 mm)
+        # ดึง drop zones จาก tracker แทน state["drop_zones"] เพื่อให้ตรงกับที่รถล็อกเป้าหมายไว้จริงๆ (กรณีที่มันเคยแยกกัน)
+        for color, pos_mm in tracker.manual_drop_zones.items():
             dz_px = mm_to_px(H, pos_mm)
             
-            # วาดรัศมีวงกลมแสดงขอบเขต Drop Zone รัศมี 90 mm
+            # วาดรัศมีวงกลมแสดงขอบเขต Drop Zone รัศมี 120 mm (12 ซม.)
             # คำนวณพิกัดขอบบนเพื่อหารัศมีในหน่วยพิกเซล
-            edge_px = mm_to_px(H, (pos_mm[0] + 90, pos_mm[1]))
+            edge_px = mm_to_px(H, (pos_mm[0] + 120, pos_mm[1]))
             radius_px = abs(edge_px[0] - dz_px[0])
             
-            # ตีเส้นวงกลมและจุดศูนย์กลาง
-            cv2.circle(frame, dz_px, radius_px, (255, 255, 0), 2)
-            cv2.circle(frame, dz_px, 5, (255, 255, 0), -1)
+            # ตีเส้นวงกลม (ใช้สีขาวแทน จะได้ดูต่างจากหินทั่วไป)
+            cv2.circle(frame, dz_px, radius_px, (255, 255, 255), 2)
+            cv2.circle(frame, dz_px, 5, (255, 255, 255), -1)
             
             cv2.putText(frame, f"DROP: {color.upper()}", (dz_px[0]-40, dz_px[1]-15),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
         # สรุปสถิติที่มุมซ้ายบนจอ
         cv2.putText(frame, f"Stones visible: {len(state['stones'])}", (10, 30),

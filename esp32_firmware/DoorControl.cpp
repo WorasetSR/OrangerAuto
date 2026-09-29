@@ -6,18 +6,18 @@ static Servo servoLeft;
 static Servo servoRight;
 
 // มุมเซอร์โวตอนปิดสนิท (ต้อง Calibrate หน้างาน)
-static const int ANGLE_LEFT_CLOSED  = 70;
-static const int ANGLE_RIGHT_CLOSED = 90;
+static const int ANGLE_LEFT_CLOSED  = 90; // อ้างอิงจาก manual mode (Pin 33)
+static const int ANGLE_RIGHT_CLOSED = 90; // อ้างอิงจาก manual mode (Pin 19)
 
 // ทิศทางการหมุนตอนเปิดเทียบกับตำแหน่งปิด: +1 = มุมเพิ่มขึ้น, -1 = มุมลดลง
-static const int LEFT_OPEN_DIRECTION  = -1;
-static const int RIGHT_OPEN_DIRECTION = +1;
+static const int LEFT_OPEN_DIRECTION  = -1; // 90 -> 10
+static const int RIGHT_OPEN_DIRECTION = +1; // 90 -> 170
 
 // gap ตรงกลาง = CHAMBER_WIDTH_CM - 2 * DOOR_WIDTH_CM * cos(theta)
 static const float CHAMBER_WIDTH_CM = 12.0;  // ความกว้างช่องเก็บทั้งหมด
 static const float DOOR_WIDTH_CM    = 5.8;   // ความกว้างแต่ละบาน
 static const float STONE_WIDTH_CM   = 5.0;   // ความกว้างก้อนหินใหญ่ที่สุด
-static const float FULLOPEN_DEG     = 90.0;  // เปิดสุด
+static const float FULLOPEN_DEG     = 80.0;  // เปิดสุด 80 องศาตามแบบ manual (ซ้าย 90-10=80, ขวา 170-90=80)
 
 // มุมที่คำนวณได้ (เติมค่าใน doorControl_begin)
 static int angleLeftCollect, angleRightCollect;

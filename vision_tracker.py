@@ -106,11 +106,11 @@ class VisionTracker:
         return True
 
     def _generate_blackout_mask(self):
-        """Precomputes the drop zone blackout mask (90mm radius) to save CPU."""
+        """Precomputes the drop zone blackout mask (120mm radius) to save CPU."""
         self._dz_blackout_mask = np.ones((480, 640), dtype=np.uint8) * 255
         for dz_color, dz_pos in self.manual_drop_zones.items():
             dz_px = self._mm_to_px_local(dz_pos)
-            edge_px = self._mm_to_px_local((dz_pos[0] + 90, dz_pos[1]))
+            edge_px = self._mm_to_px_local((dz_pos[0] + 120, dz_pos[1]))
             radius_px = int(math.hypot(edge_px[0] - dz_px[0], edge_px[1] - dz_px[1]))
             cv2.circle(self._dz_blackout_mask, dz_px, radius_px, 0, -1)
 
@@ -348,7 +348,7 @@ class VisionTracker:
             if self.field_mask is not None:
                 mask = cv2.bitwise_and(mask, self.field_mask)
                 
-            # Apply precomputed blackout mask for drop zones (90mm radius)
+            # Apply precomputed blackout mask for drop zones
             if hasattr(self, '_dz_blackout_mask') and self._dz_blackout_mask is not None:
                 mask = cv2.bitwise_and(mask, self._dz_blackout_mask)
             

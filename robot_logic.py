@@ -49,7 +49,7 @@ class GemstoneRobotController:
         # boundary mask, so detection ignores the border tiles) and
         # manual_dropzones.json (fixed drop-zone positions) in its own __init__ —
         # the same calibrated files debug_vision.py uses. No need to load them again here.
-        self.vision = VisionTracker(camera_idx=1)
+        self.vision = VisionTracker(camera_idx=0)
         self.strategy = StrategyEngine()
         self.planner = PathPlanner()
         
@@ -370,14 +370,16 @@ class GemstoneRobotController:
         elif self.state == "LOCK_DOORS":
             self.send_command(0, 0, door_cmd="close") 
             
-            if time.time() - self._state_timer > 0.3:
+            # ให้เวลาเซอร์โวปิดประตูนานขึ้น (จาก 0.3s เป็น 0.8s) เพื่อให้ประตูหุบสนิทจริงๆ ก่อนถอย
+            if time.time() - self._state_timer > 0.8:
                 self._state_timer = time.time()
                 self.state = "BACKOUT_CLEAR"
             
         elif self.state == "BACKOUT_CLEAR":
             self.send_command(-150, -150) 
             
-            if time.time() - self._state_timer > 0.5:
+            # ถอยหลังให้นานขึ้น (จาก 0.5s เป็น 1.5s) จะได้ถอยออกมาชัดเจนก่อนไปหาก้อนถัดไป
+            if time.time() - self._state_timer > 1.5:
                 self.send_command(0, 0) 
                 self.state = "CHECK_CAPACITY"
             
@@ -442,8 +444,8 @@ class GemstoneRobotController:
                 self._loaded_color = None # NEW-2 FIX: Reset loaded color
                 self.state = "SCAN_OUTER_RING"
             elif elapsed > 0.5:
-                # Phase 2: Reverse with doors open (MAJ-2: 2.0 seconds)
-                self.send_command(-250, -250, door_cmd="release")
+                # Phase 2: Reverse with doors open (ลดความเร็วถอยหลังเพื่อความนุ่มนวล)
+                self.send_command(-150, -150, door_cmd="release")
             else:
                 # Phase 1: Stop and open doors (wait for servo)
                 self.send_command(0, 0, door_cmd="release")

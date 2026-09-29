@@ -107,17 +107,19 @@ class PathPlanner:
         
         # If the angle is severely wrong (e.g. > 45 degrees), just spin in place
         if abs(error) > math.radians(45):
-            # Spin
+            # Spin (หมุนอยู่กับที่)
+            # แก้บั๊ก: error > 0 คือเป้าหมายอยู่ทางขวา ต้องหมุนขวา (ล้อซ้ายเดินหน้า, ล้อขวาถอยหลัง)
             spin_speed = 200
             if error > 0:
-                vL, vR = -spin_speed, spin_speed # Turn right
+                vL, vR = spin_speed, -spin_speed  # หมุนขวา
             else:
-                vL, vR = spin_speed, -spin_speed # Turn left
+                vL, vR = -spin_speed, spin_speed  # หมุนซ้าย
             return vL, vR, distance, False
             
-        # If mostly aligned, drive forward with correction
-        vL = self.base_speed - correction
-        vR = self.base_speed + correction
+        # ถ้ามุมเริ่มตรงแล้ว ให้วิ่งเดินหน้าพร้อมปรับแต่งทิศทาง
+        # แก้บั๊ก: error > 0 ต้องให้ล้อซ้ายเร็วกว่าล้อขวา เพื่อเลี้ยวขวา
+        vL = self.base_speed + correction
+        vR = self.base_speed - correction
         
         # Constrain speeds
         vL = max(-self.max_speed, min(self.max_speed, vL))
