@@ -8,7 +8,7 @@ class PathPlanner:
         self.last_heading_error = 0
         
         # Base speed for navigation
-        self.base_speed = 200
+        self.base_speed = 150
         self.max_speed = 255
         
         self.FIELD_W = 2100

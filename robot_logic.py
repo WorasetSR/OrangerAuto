@@ -356,7 +356,7 @@ class GemstoneRobotController:
             if time.time() - self._state_timer > 5.0:
                 print("[WARNING] Ingest Timeout! Aborting stone.")
                 self._state_timer = time.time()
-                self.state = "BACKOUT_CLEAR"
+                self.state = "LOCK_DOORS"
                 return
 
             locked_stone = self.vision.get_stone_by_id(self.target_stone_id)
@@ -366,39 +366,35 @@ class GemstoneRobotController:
             # mechanism) — keep driving to the last known position since we're
             # already this close, rather than aborting the ingest.
                 
-            # CRIT-4 & NEW-1 FIX: Split mouth_pos for dist, robot_pos for steering
-            vL, vR, _, _ = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
-            # Door was already opened once when we transitioned into this state
-            # (see ALIGN_APPROACH). Don't resend door_cmd every frame here — doing
-            # so drives the servo continuously at the same time the drive motors
-            # need their highest current (start/stall), which can sag a marginal
-            # power supply enough to stall the motors while the servo keeps working.
+            # พุ่งตรงอย่างเดียว (Blind Ram) เพื่อป้องกันปัญหามุมเลี้ยวแกว่งตอนเข้าใกล้หิน
+            vL, vR = 140, 140
             self.send_command(vL, vR)
             
             # Distance from mouth to stone
             dist_to_stone = math.hypot(mouth_pos[0] - self.target_stone['pos'][0],
                                        mouth_pos[1] - self.target_stone['pos'][1])
             
-            if dist_to_stone < 30: # 30mm from mouth_pos to stone
+            if dist_to_stone < 30 or (time.time() - self._state_timer > 1.5):
                 self.send_command(0, 0)
                 self.stone_count += 1
-                self._loaded_color = self.target_color # NEW-2 FIX: Track loaded color
+                self._loaded_color = self.target_color
                 self._state_timer = time.time() 
                 self.state = "LOCK_DOORS"
+                return
             
         elif self.state == "LOCK_DOORS":
             self.send_command(0, 0, door_cmd="close") 
             
-            # ให้เวลาเซอร์โวปิดประตูนานขึ้น (จาก 0.3s เป็น 0.8s) เพื่อให้ประตูหุบสนิทจริงๆ ก่อนถอย
+            # ให้เวลาเซอร์โวปิดประตูนานขึ้น (จาก 0.3s เป็น 0.8s) เพื่อให้ประตูหุบสนิทจริงๆ ก่อนถอยตั้งหลัก
             if time.time() - self._state_timer > 0.8:
                 self._state_timer = time.time()
                 self.state = "BACKOUT_CLEAR"
             
         elif self.state == "BACKOUT_CLEAR":
-            self.send_command(-150, -150) 
+            # ถอยหลังช้าๆ (-120) เป็นเวลา 0.8 วินาที เพื่อถอยตั้งหลักเบาๆ ไม่ให้กระเด็นไปไกล
+            self.send_command(-120, -120) 
             
-            # ถอยหลังให้นานขึ้น (จาก 0.5s เป็น 1.5s) จะได้ถอยออกมาชัดเจนก่อนไปหาก้อนถัดไป
-            if time.time() - self._state_timer > 1.5:
+            if time.time() - self._state_timer > 0.8:
                 self.send_command(0, 0) 
                 self.state = "CHECK_CAPACITY"
             
@@ -454,19 +450,28 @@ class GemstoneRobotController:
         elif self.state == "UNLOAD_REVERSE":
             elapsed = time.time() - self._state_timer
             
-            # NEW-1 FIX: Properly ordered command phases
-            if elapsed > 2.5:
-                # Phase 3: Done - close doors and reset
+            # คำนวณระยะห่างปัจจุบันระหว่างรถกับจุดกึ่งกลาง Dropzone
+            drop_pos = self.drop_zones.get(self.target_color, self.FALLBACK_DROP_ZONES.get(self.target_color))
+            dist_from_drop = 0
+            if robot_pos and drop_pos:
+                dist_from_drop = math.hypot(robot_pos[0] - drop_pos[0], robot_pos[1] - drop_pos[1])
+            
+            # ถอยหลังจนกว่าระยะห่างจะพ้นรัศมีดรอปโซน (120mm) + ครึ่งคันรถ (ประมาณ 150mm) = 270mm
+            # หรือถ้าเกิน 2.5 วินาทีแล้วก็ตัดจบเลย (รอประตู 1.5วิ + ถอย 1.0วิ) เผื่อกล้องค้างหรือรถติด
+            is_clear_of_zone = (dist_from_drop > 270)
+            
+            if elapsed > 1.5 and (is_clear_of_zone or elapsed > 2.5):
+                # Phase 3: พ้นโซนแล้ว หุบประตูและไปต่อ
                 self.send_command(0, 0, door_cmd="close")
                 self.stone_count = 0  
                 self.target_color = None 
-                self._loaded_color = None # NEW-2 FIX: Reset loaded color
+                self._loaded_color = None
                 self.state = "SCAN_OUTER_RING"
-            elif elapsed > 0.5:
-                # Phase 2: Reverse with doors open (ลดความเร็วถอยหลังเพื่อความนุ่มนวล)
-                self.send_command(-150, -150, door_cmd="release")
+            elif elapsed > 1.5:
+                # Phase 2: เข้าเกียร์ถอยหลัง
+                self.send_command(-140, -140, door_cmd="release")
             else:
-                # Phase 1: Stop and open doors (wait for servo)
+                # Phase 1: Stop and open doors (รอ 1.5 วินาที เพื่อให้ Servo กางออกจนสุดจริงๆ)
                 self.send_command(0, 0, door_cmd="release")
 
         elif self.state == "FINISH":
