@@ -189,7 +189,11 @@ class GemstoneRobotController:
             
             # POINT 2 FIX: ให้โอกาสกล้องเบลอ 1.0 วินาที ให้รถวิ่งด้วยความเร็วเดิมไปก่อน
             if time.time() - self._robot_lost_since < 1.0:
-                self.send_command(self._last_vL, self._last_vR)
+                # ปล่อยให้วิ่งตรงต่อได้ แต่ถ้ากำลังหมุน ให้หยุดทันทีเพื่อความปลอดภัย
+                if abs(self._last_vL - self._last_vR) < 50:
+                    self.send_command(self._last_vL, self._last_vR)
+                else:
+                    self.send_command(0, 0)
             else:
                 self.send_command(0, 0)
                 
@@ -390,7 +394,7 @@ class GemstoneRobotController:
 
         elif self.state == "DOOR_OPENING":
             self.send_command(0, 0)  # หยุดรถรอประตูเปิด
-            if time.time() - self._state_timer > 0.4:  # รอ 400ms ให้ servo กางจนสุด
+            if time.time() - self._state_timer > 0.6:  # รอ 600ms ให้ servo กางจนสุด
                 self._state_timer = time.time()
                 self.state = "DRIVE_INGEST"
         
@@ -539,11 +543,15 @@ class GemstoneRobotController:
                 self._loaded_color = None
                 self.state = "SCAN_OUTER_RING"
             elif elapsed > 1.5:
-                # Phase 2: เข้าเกียร์ถอยหลัง
-                self.send_command(-140, -140, door_cmd="release")
+                # Phase 2: เข้าเกียร์ถอยหลัง (ไม่ส่งคำสั่งประตูซ้ำแล้ว)
+                self.send_command(-140, -140)
             else:
                 # Phase 1: Stop and open doors (รอ 1.5 วินาที เพื่อให้ Servo กางออกจนสุดจริงๆ)
-                self.send_command(0, 0, door_cmd="release")
+                # ส่งคำสั่ง release เฉพาะ 0.3 วินาทีแรก ป้องกันไม่ให้ Servo ดึงกระแสซ้ำซ้อน
+                if elapsed < 0.3:
+                    self.send_command(0, 0, door_cmd="release")
+                else:
+                    self.send_command(0, 0)
 
         elif self.state == "FINISH":
             self.send_command(0, 0)

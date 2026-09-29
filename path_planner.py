@@ -131,7 +131,7 @@ class PathPlanner:
         if abs(error) > math.radians(45):
             # Spin (หมุนอยู่กับที่)
             # แก้บั๊ก: error > 0 คือเป้าหมายอยู่ทางขวา ต้องหมุนขวา (ล้อซ้ายเดินหน้า, ล้อขวาถอยหลัง)
-            spin_speed = 200
+            spin_speed = 150
             if error > 0:
                 vL, vR = spin_speed, -spin_speed  # หมุนขวา
             else:
