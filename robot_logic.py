@@ -428,7 +428,7 @@ class GemstoneRobotController:
                 self.target_stone = locked_stone
                 
             # พุ่งตรงอย่างเดียว (Blind Ram) 
-            vL, vR = 150, 210
+            vL, vR = 190, 255
             self.send_command(vL, vR)
             
             # Distance from mouth to stone
@@ -457,7 +457,7 @@ class GemstoneRobotController:
             # ถอยหลังช้าๆ (-120) เป็นเวลา 0.8 วินาที เพื่อถอยตั้งหลักและหลบทางให้กล้องมองเห็นพื้น
             self.send_command(-200, -200) 
             
-            if time.time() - self._state_timer > 0.8:
+            if time.time() - self._state_timer > 1.0:
                 self.send_command(0, 0) 
                 self._state_timer = time.time()
                 self.state = "VERIFY_COLLECTION" # ไปตรวจผลงานก่อนเช็คความจุ
@@ -533,7 +533,7 @@ class GemstoneRobotController:
             
             self.send_command(vL, vR)
             
-            if dist < 100: # Reached waypoint
+            if dist < 50: # Reached waypoint
                 self.current_waypoint_idx += 1
                 self.planner.reset_pid()
                 self._state_timer = time.time() # Reset timer for next WP
@@ -565,7 +565,7 @@ class GemstoneRobotController:
                 self.state = "SCAN_OUTER_RING"
             elif elapsed > 1.5:
                 # Phase 2: เข้าเกียร์ถอยหลัง (ไม่ส่งคำสั่งประตูซ้ำแล้ว)
-                self.send_command(-140, -140)
+                self.send_command(-200, -200)
             else:
                 # Phase 1: Stop and open doors (รอ 1.5 วินาที เพื่อให้ Servo กางออกจนสุดจริงๆ)
                 # ส่งคำสั่ง release เฉพาะ 0.3 วินาทีแรก ป้องกันไม่ให้ Servo ดึงกระแสซ้ำซ้อน

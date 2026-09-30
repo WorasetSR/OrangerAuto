@@ -10,8 +10,8 @@ class PathPlanner:
         # Base speed for navigation
         self.base_speed = 170
         self.max_speed = 255
-        self.FIELD_W = 700
-        self.FIELD_H = 400
+        self.FIELD_W = 2100
+        self.FIELD_H = 1200
         self.DANGER_ZONE = None
 
     def update_danger_zone(self, x_min, x_max, y_min, y_max):
