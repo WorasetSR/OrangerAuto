@@ -108,7 +108,7 @@ def main():
             # วาดรัศมีวงกลมแสดงขอบเขต Drop Zone รัศมี 120 mm (12 ซม.)
             # คำนวณพิกัดขอบบนเพื่อหารัศมีในหน่วยพิกเซล
             edge_px = mm_to_px(H, (pos_mm[0] + 120, pos_mm[1]))
-            radius_px = abs(edge_px[0] - dz_px[0])
+            radius_px = int(math.hypot(edge_px[0] - dz_px[0], edge_px[1] - dz_px[1]))
             
             # ตีเส้นวงกลม (ใช้สีขาวแทน จะได้ดูต่างจากหินทั่วไป)
             cv2.circle(frame, dz_px, radius_px, (255, 255, 255), 2)

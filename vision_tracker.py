@@ -325,6 +325,14 @@ class VisionTracker:
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
         raw_stone_detections = []  # collected first, then matched to persistent ids below
+        
+        # Create dynamic robot blackout mask based on footprint to ignore stones underneath
+        robot_mask = None
+        if state["robot"]["footprint"]:
+            robot_mask = np.ones((480, 640), dtype=np.uint8) * 255
+            footprint_px = [self._mm_to_px_local(pt) for pt in state["robot"]["footprint"]]
+            cv2.fillPoly(robot_mask, [np.array(footprint_px, dtype=np.int32)], 0)
+
         for color_name, bounds in self.hsv_ranges.items():
             if color_name == "yellow": continue 
             
@@ -352,6 +360,10 @@ class VisionTracker:
             # Apply precomputed blackout mask for drop zones
             if hasattr(self, '_dz_blackout_mask') and self._dz_blackout_mask is not None:
                 mask = cv2.bitwise_and(mask, self._dz_blackout_mask)
+                
+            # Apply dynamic blackout mask for robot footprint
+            if robot_mask is not None:
+                mask = cv2.bitwise_and(mask, robot_mask)
             
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for cnt in contours:
