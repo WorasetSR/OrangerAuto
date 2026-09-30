@@ -314,14 +314,19 @@ class GemstoneRobotController:
                 self.stone_waypoints = self.planner.generate_perimeter_waypoints(robot_pos, self.target_stone['pos'])
                 if len(self.stone_waypoints) > 1:
                     # Check if we are already on the final approach leg (at the perimeter ready to dive in)
-                    # The final approach starts at the second-to-last waypoint.
                     final_approach_start = self.stone_waypoints[-2]
                     dist_to_final_start = math.hypot(robot_pos[0] - final_approach_start[0], 
                                                      robot_pos[1] - final_approach_start[1])
+                    dist_to_target = math.hypot(robot_pos[0] - self.target_stone['pos'][0],
+                                                robot_pos[1] - self.target_stone['pos'][1])
+                    perimeter_to_target = math.hypot(final_approach_start[0] - self.target_stone['pos'][0],
+                                                     final_approach_start[1] - self.target_stone['pos'][1])
                     
-                    # If we are within 110mm of the plunge point, ignore reroute and just go straight!
-                    # (110mm is slightly larger than the 100mm waypoint completion radius)
-                    if dist_to_final_start > 110:
+                    # We are committed to diving if we are close to the start point, 
+                    # OR we have made progress moving towards the target (dist_to_target < perimeter_to_target)
+                    is_committed = (dist_to_final_start < 110) or (dist_to_target < perimeter_to_target + 50)
+                    
+                    if not is_committed:
                         print(f"[NAV] Danger Zone detected in path to stone. Rerouting via {self.stone_waypoints[:-1]}")
                         self.current_stone_wp_idx = 0
                         self.planner.reset_pid()
