@@ -227,6 +227,7 @@ class GemstoneRobotController:
                     dz['x_min'], dz['x_max'],
                     dz['y_min'], dz['y_max']
                 )
+                self.strategy.update_danger_zone(dz)
                 cx, cy = self.vision.manual_center
                 self.strategy.update_center(cx, cy)
                 print(f"[INIT] Manual Center set to: ({cx}, {cy})")
@@ -312,12 +313,21 @@ class GemstoneRobotController:
             if needs_reroute:
                 self.stone_waypoints = self.planner.generate_perimeter_waypoints(robot_pos, self.target_stone['pos'])
                 if len(self.stone_waypoints) > 1:
-                    print(f"[NAV] Danger Zone detected in path to stone. Rerouting via {self.stone_waypoints[:-1]}")
-                    self.current_stone_wp_idx = 0
-                    self.planner.reset_pid()
-                    self._state_timer = time.time()
-                    self.state = "NAV_TO_STONE_WP"
-                    return
+                    # Check if we are already on the final approach leg (at the perimeter ready to dive in)
+                    # The final approach starts at the second-to-last waypoint.
+                    final_approach_start = self.stone_waypoints[-2]
+                    dist_to_final_start = math.hypot(robot_pos[0] - final_approach_start[0], 
+                                                     robot_pos[1] - final_approach_start[1])
+                    
+                    # If we are within 110mm of the plunge point, ignore reroute and just go straight!
+                    # (110mm is slightly larger than the 100mm waypoint completion radius)
+                    if dist_to_final_start > 110:
+                        print(f"[NAV] Danger Zone detected in path to stone. Rerouting via {self.stone_waypoints[:-1]}")
+                        self.current_stone_wp_idx = 0
+                        self.planner.reset_pid()
+                        self._state_timer = time.time()
+                        self.state = "NAV_TO_STONE_WP"
+                        return
 
             vL, vR, dist, aligned = self.planner.calculate_steering(robot_pos, robot_heading, self.target_stone['pos'])
             self.send_command(vL, vR)
@@ -413,7 +423,7 @@ class GemstoneRobotController:
                 self.target_stone = locked_stone
                 
             # พุ่งตรงอย่างเดียว (Blind Ram) 
-            vL, vR = 140, 140
+            vL, vR = 150, 210
             self.send_command(vL, vR)
             
             # Distance from mouth to stone
@@ -440,7 +450,7 @@ class GemstoneRobotController:
             
         elif self.state == "BACKOUT_CLEAR":
             # ถอยหลังช้าๆ (-120) เป็นเวลา 0.8 วินาที เพื่อถอยตั้งหลักและหลบทางให้กล้องมองเห็นพื้น
-            self.send_command(-120, -120) 
+            self.send_command(-200, -200) 
             
             if time.time() - self._state_timer > 0.8:
                 self.send_command(0, 0) 
@@ -453,6 +463,7 @@ class GemstoneRobotController:
             if time.time() - self._state_timer > 0.5:
                 # กวาดสายตาดูว่าพิกัดเดิมที่เราเพิ่งงับไป ยังมีหินสีเป้าหมายหลงเหลืออยู่ไหม
                 missed = False
+                new_target_id = None
                 for s in stones:
                     if s['color'] == self.target_color:
                         # วัดระยะห่างจากหินที่เห็น กับ พิกัดสุดท้ายที่เราจำไว้
@@ -461,12 +472,16 @@ class GemstoneRobotController:
                         # ถ้าระยะห่างน้อยกว่า 80mm แปลว่ามันคือก้อนเดิมที่ยังไม่ขยับไปไหน!
                         if dist_from_last_pos < 80:
                             missed = True
+                            new_target_id = s['id']
                             break
                 
                 if missed:
-                    print(f"[VERIFY] งับพลาด! หินยังอยู่ที่เดิม (ไม่บวกคะแนน)")
-                    # กลับไปเริ่มหาหินใหม่
-                    self.state = "SCAN_OUTER_RING"
+                    print(f"[VERIFY] งับพลาด! หินยังอยู่ที่เดิม เริ่มงับใหม่ที่ ID: {new_target_id} (ไม่บวกคะแนน)")
+                    # ล็อกเป้า ID ใหม่ของหินก้อนเดิม แล้วกลับไปงับซ้ำทันที!
+                    self.target_stone_id = new_target_id
+                    self.planner.reset_pid()
+                    self._state_timer = time.time()
+                    self.state = "ALIGN_APPROACH"
                 else:
                     print(f"[VERIFY] สำเร็จ! หินหายไปจากพื้นแล้ว (บวก 1 คะแนน)")
                     self.stone_count += 1
@@ -532,10 +547,11 @@ class GemstoneRobotController:
                 dist_from_drop = math.hypot(robot_pos[0] - drop_pos[0], robot_pos[1] - drop_pos[1])
             
             # ถอยหลังจนกว่าระยะห่างจะพ้นรัศมีดรอปโซน (120mm) + ครึ่งคันรถ (ประมาณ 150mm) = 270mm
-            # หรือถ้าเกิน 2.5 วินาทีแล้วก็ตัดจบเลย (รอประตู 1.5วิ + ถอย 1.0วิ) เผื่อกล้องค้างหรือรถติด
+            # หรือถ้าเกินเวลาที่ตั้งไว้ เผื่อกล้องค้างหรือรถติด
             is_clear_of_zone = (dist_from_drop > 270)
             
-            if elapsed > 1.5 and (is_clear_of_zone or elapsed > 2.5):
+            # ยืดเวลาเป็น 4.0 วินาที เพื่อให้มีเวลาเข้าเกียร์ถอยหลังเต็มที่ (2.5 วิ)
+            if elapsed > 1.5 and (is_clear_of_zone or elapsed > 4.0):
                 # Phase 3: พ้นโซนแล้ว หุบประตูและไปต่อ
                 self.send_command(0, 0, door_cmd="close")
                 self.stone_count = 0  

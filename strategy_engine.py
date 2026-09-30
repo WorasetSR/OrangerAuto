@@ -5,21 +5,26 @@ class StrategyEngine:
         # Field center where the pile of 54 stones is located (in mm)
         self.CENTER_X = 1050
         self.CENTER_Y = 600
+        self.DANGER_ZONE = None
 
     def update_center(self, x, y):
         self.CENTER_X = x
         self.CENTER_Y = y
+
+    def update_danger_zone(self, dz):
+        self.DANGER_ZONE = dz
 
     def get_distance_from_center(self, pos):
         """Calculate radial distance from the center pile."""
         return math.hypot(pos[0] - self.CENTER_X, pos[1] - self.CENTER_Y)
 
     def get_valid_stones(self, stones, drop_zones):
-        """Filter out stones that are already in their respective drop zones."""
+        """Filter out stones that are already in their respective drop zones or in the Danger Zone."""
         valid = []
         # รัศมี Drop zone จริงคือ 8.5 cm (85 mm) + เผื่อระยะหินกระเด็นขอบๆ อีกนิดหน่อย เป็น 120 mm
         DROP_RADIUS = 120 
         for s in stones:
+                    
             in_drop = False
             # MAJ-2 FIX: ตรวจสอบเฉพาะ Drop zone ที่สีตรงกับหิน
             if s['color'] in drop_zones:
